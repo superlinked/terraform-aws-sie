@@ -1,5 +1,5 @@
 resource "aws_ecr_repository" "server" {
-  name                 = "sie-server"
+  name                 = var.server_ecr_repository_name
   image_tag_mutability = "MUTABLE"
   force_delete         = true
 
@@ -9,7 +9,7 @@ resource "aws_ecr_repository" "server" {
 }
 
 resource "aws_ecr_repository" "router" {
-  name                 = "sie-router"
+  name                 = var.router_ecr_repository_name
   image_tag_mutability = "MUTABLE"
   force_delete         = true
 

@@ -110,56 +110,81 @@ module "eks" {
     delete = "60m"
   }
 
-  eks_managed_node_groups = {
-    cpu = {
-      min_size       = 1
-      max_size       = 5
-      instance_types = ["t3.xlarge"]            # 4 vCPU, 16GB - matches GCP e2-standard-4
-      ami_type       = "AL2023_x86_64_STANDARD" # Amazon Linux 2023
+  eks_managed_node_groups = merge(
+    {
+      cpu = {
+        min_size       = 1
+        max_size       = 5
+        instance_types = ["t3.xlarge"]            # 4 vCPU, 16GB
+        ami_type       = "AL2023_x86_64_STANDARD" # Amazon Linux 2023
 
-      # Optional: Enable SSM for SSH-less debugging access
-      iam_role_additional_policies = {
-        AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-      }
+        iam_role_additional_policies = {
+          AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+        }
 
-      timeouts = {
-        create = "90m"
-        update = "90m"
-        delete = "90m"
-      }
-    }
-    gpu = {
-      min_size       = var.gpu_min_size
-      max_size       = var.gpu_max_size
-      instance_types = [var.gpu_instance_type]
-      ami_type       = "AL2023_x86_64_NVIDIA" # Amazon Linux 2023 with GPU
-      capacity_type  = var.gpu_capacity_type
-
-      # Optional: Enable SSM for SSH-less debugging access
-      iam_role_additional_policies = {
-        AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-      }
-
-      # Taint GPU nodes to prevent non-GPU pods from scheduling
-      taints = {
-        gpu = {
-          key    = "nvidia.com/gpu"
-          value  = "present"
-          effect = "NO_SCHEDULE"
+        timeouts = {
+          create = "90m"
+          update = "90m"
+          delete = "90m"
         }
       }
+    },
+    {
+      for g in local.effective_gpu_groups :
+      g.name => {
+        min_size       = g.min_size
+        max_size       = g.max_size
+        instance_types = [g.instance_type]
+        ami_type       = "AL2023_x86_64_NVIDIA"
+        capacity_type  = g.capacity_type
+        subnet_ids     = local.gpu_group_subnets[g.name]
 
-      tags = {
-        "k8s.io/cluster-autoscaler/enabled"             = "true"
-        "k8s.io/cluster-autoscaler/${var.project_name}" = "owned"
-      }
-      timeouts = {
-        create = "90m"
-        update = "90m"
-        delete = "90m"
+        # 100GB root volume — large CUDA images need >20GB default
+        block_device_mappings = {
+          xvda = {
+            device_name = "/dev/xvda"
+            ebs = {
+              volume_size           = 100
+              volume_type           = "gp3"
+              delete_on_termination = true
+            }
+          }
+        }
+
+        labels = merge(
+          {
+            "environment"                   = "test"
+            "managed-by"                    = "terraform"
+            "sie.superlinked.com/node-type" = "gpu"
+          },
+          g.labels,
+        )
+
+        iam_role_additional_policies = {
+          AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+        }
+
+        taints = {
+          gpu = {
+            key    = "nvidia.com/gpu"
+            value  = "present"
+            effect = "NO_SCHEDULE"
+          }
+        }
+
+        tags = {
+          "k8s.io/cluster-autoscaler/enabled"             = "true"
+          "k8s.io/cluster-autoscaler/${var.project_name}" = "owned"
+        }
+
+        timeouts = {
+          create = "90m"
+          update = "90m"
+          delete = "90m"
+        }
       }
     }
-  }
+  )
 }
 
 resource "aws_security_group_rule" "eks_egress_to_vpc_endpoints" {

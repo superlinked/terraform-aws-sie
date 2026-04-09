@@ -25,7 +25,7 @@ run "validate_ecr_repositories" {
   command = plan
 
   variables {
-    project_name             = "sie-test"
+    project_name               = "sie-test"
     server_ecr_repository_name = "sie-server"
     router_ecr_repository_name = "sie-router"
   }
