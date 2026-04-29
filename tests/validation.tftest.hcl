@@ -25,9 +25,10 @@ run "validate_ecr_repositories" {
   command = plan
 
   variables {
-    project_name               = "sie-test"
-    server_ecr_repository_name = "sie-server"
-    router_ecr_repository_name = "sie-router"
+    project_name                = "sie-test"
+    server_ecr_repository_name  = "sie-server"
+    gateway_ecr_repository_name = "sie-gateway"
+    config_ecr_repository_name  = "sie-config"
   }
 
   # ECR server repository should be created
@@ -36,10 +37,16 @@ run "validate_ecr_repositories" {
     error_message = "ECR server repository name should match variable"
   }
 
-  # ECR router repository should be created
+  # ECR gateway repository should be created
   assert {
-    condition     = aws_ecr_repository.router.name == "sie-router"
-    error_message = "ECR router repository name should match variable"
+    condition     = aws_ecr_repository.gateway.name == "sie-gateway"
+    error_message = "ECR gateway repository name should match variable"
+  }
+
+  # ECR config repository should be created (sie-config control plane image)
+  assert {
+    condition     = aws_ecr_repository.config.name == "sie-config"
+    error_message = "ECR config repository name should match variable"
   }
 }
 

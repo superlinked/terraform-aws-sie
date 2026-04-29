@@ -5,13 +5,13 @@
 # Terraform = cloud infra only. K8s resources deployed via Helm:
 #
 #   $(terraform output -raw kubectl_config_command)
-#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.2.0 \
+#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.0 \
 #     --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=$(terraform output -raw sie_irsa_role_arn)
 #
 # Prerequisites:
 #   1. AWS credentials configured (aws configure or environment variables)
 #   2. EC2 quota for g6.xlarge in the target region
-#   3. SIE Docker images pushed to ECR (docker push to ECR)
+#   3. SIE Docker images pushed to ECR (mise run cluster create --provider aws --name dev-g6-spot)
 #
 # Usage:
 #   cd deploy/terraform/aws/examples/dev-g6-spot
@@ -51,7 +51,7 @@ provider "aws" {
 
 module "sie_eks" {
   source  = "superlinked/sie/aws"
-  version = "0.2.0"
+  version = "0.3.0"
 
   aws_region        = var.aws_region
   project_name      = var.project_name
@@ -89,4 +89,9 @@ output "sie_irsa_role_arn" {
 output "cluster_autoscaler_irsa_role_arn" {
   description = "Cluster autoscaler IRSA role ARN — pass to helm install"
   value       = module.sie_eks.cluster_autoscaler_irsa_role_arn
+}
+
+output "workload_identity_annotation" {
+  description = "Helm --set value for IRSA role-ARN annotation"
+  value       = "eks.amazonaws.com/role-arn=${module.sie_eks.sie_irsa_role_arn}"
 }

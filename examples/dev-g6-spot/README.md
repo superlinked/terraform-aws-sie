@@ -10,7 +10,7 @@ Creates a minimal EKS cluster with a single g6.xlarge spot GPU node group (NVIDI
 | GPU node group | 1x NVIDIA L4 per node (g6.xlarge), spot instances, scale 0-5 |
 | CPU node group | t3.xlarge (system workloads), scale 1-5 |
 | VPC | 2 AZs, public + private subnets, NAT gateway, VPC endpoints |
-| ECR | Repositories for `sie-server` and `sie-router` images |
+| ECR | Repositories for `sie-server`, `sie-gateway`, and `sie-config` images |
 | Cluster Autoscaler | Auto-scales node groups based on pending pods |
 | NVIDIA device plugin | GPU scheduling support |
 | IRSA | IAM roles for SIE and EBS CSI driver |
@@ -31,8 +31,8 @@ After apply, deploy SIE via Helm:
 # Configure kubectl
 $(terraform output -raw kubectl_config_command)
 
-# Install SIE (router, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.2.0 \
+# Install SIE (gateway, sie-config, workers, KEDA, Prometheus, Grafana)
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.0 \
   --namespace sie --create-namespace \
   -f values-aws.yaml \
   --create-namespace -n sie \

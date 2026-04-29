@@ -48,7 +48,12 @@ output "ecr_server_repository_url" {
   value       = aws_ecr_repository.server.repository_url
 }
 
-output "ecr_router_repository_url" {
-  description = "ECR repository URL for sie-router images"
-  value       = aws_ecr_repository.router.repository_url
+output "ecr_gateway_repository_url" {
+  description = "ECR repository URL for sie-gateway images"
+  value       = aws_ecr_repository.gateway.repository_url
+}
+
+output "ecr_config_repository_url" {
+  description = "ECR repository URL for sie-config images"
+  value       = aws_ecr_repository.config.repository_url
 }

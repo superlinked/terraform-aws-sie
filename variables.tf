@@ -16,10 +16,16 @@ variable "server_ecr_repository_name" {
   default     = "sie-server"
 }
 
-variable "router_ecr_repository_name" {
-  description = "The name of the ECR repository for the sie-router."
+variable "gateway_ecr_repository_name" {
+  description = "The name of the ECR repository for the sie-gateway."
   type        = string
-  default     = "sie-router"
+  default     = "sie-gateway"
+}
+
+variable "config_ecr_repository_name" {
+  description = "The name of the ECR repository for the sie-config control plane image."
+  type        = string
+  default     = "sie-config"
 }
 
 # =============================================================================

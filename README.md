@@ -9,7 +9,7 @@ One command to get a GPU-ready EKS cluster for [SIE](https://github.com/superlin
 - **Scale-to-zero** — GPU nodes scale down to zero when idle, so you only pay when running inference
 - **Cluster Autoscaler** — automatically scales node groups based on pending pod demand
 - **NVIDIA device plugin** — pre-installed so GPU pods schedule immediately
-- **ECR repositories** — private container registries for `sie-server` and `sie-router` images
+- **ECR repositories** — private container registries for `sie-server` and `sie-gateway` images
 - **IRSA** (IAM Roles for Service Accounts) — pods authenticate to AWS without stored credentials
 - **VPC endpoints** — private connectivity to ECR, S3, STS, and other AWS services
 - **EBS CSI driver** — persistent volumes work out of the box
@@ -30,8 +30,8 @@ That's it. After apply, configure kubectl and deploy SIE via Helm:
 # Point kubectl at the new cluster
 $(terraform output -raw kubectl_config_command)
 
-# Deploy SIE (router, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.2.0 \
+# Deploy SIE (gateway, workers, KEDA, Prometheus, Grafana)
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.0 \
   -f values-aws.yaml \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)"
@@ -83,7 +83,8 @@ No variables are strictly required — all have sensible defaults. Override thes
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `server_ecr_repository_name` | `sie-server` | ECR repo name for the inference server |
-| `router_ecr_repository_name` | `sie-router` | ECR repo name for the request router |
+| `gateway_ecr_repository_name` | `sie-gateway` | ECR repo name for the request gateway |
+| `config_ecr_repository_name` | `sie-config` | ECR repo name for the sie-config control plane image |
 
 ### Workload identity
 
@@ -102,7 +103,8 @@ After `terraform apply`, use these outputs to connect and deploy:
 | `cluster_name` | EKS cluster name |
 | `cluster_endpoint` | Kubernetes API endpoint (sensitive) |
 | `ecr_server_repository_url` | Where to push `sie-server` images |
-| `ecr_router_repository_url` | Where to push `sie-router` images |
+| `ecr_gateway_repository_url` | Where to push `sie-gateway` images |
+| `ecr_config_repository_url` | Where to push `sie-config` images |
 | `sie_irsa_role_arn` | Pass to Helm for workload identity |
 | `cluster_autoscaler_irsa_role_arn` | Cluster autoscaler IAM role |
 | `gpu_instance_type` | Confirm which GPU type is deployed |
@@ -121,13 +123,17 @@ After `terraform apply`, use these outputs to connect and deploy:
 └──────────┘             │  │  │     EKS Cluster (private + public)       │ │  │
                          │  │  │                                          │ │  │
                          │  │  │  ┌────────────┐    ┌─────────────────┐   │ │  │
-                         │  │  │  │   Router   │───▶│  GPU Workers    │   │ │  │
+                         │  │  │  │   Gateway   │───▶│  GPU Workers    │   │ │  │
                          │  │  │  │            │    │  (L4/A10G/A100) │   │ │  │
-                         │  │  │  └────────────┘    └─────────────────┘   │ │  │
+                         │  │  │  └─────┬──────┘    └─────────────────┘   │ │  │
                          │  │  │        │                    │            │ │  │
-                         │  │  │  ┌─────┴────────────────────┴────────┐   │ │  │
-                         │  │  │  │  KEDA · Prometheus · Grafana      │   │ │  │
-                         │  │  │  └───────────────────────────────────┘   │ │  │
+                         │  │  │  ┌─────┴──────┐              │            │ │  │
+                         │  │  │  │ sie-config │ (control plane, NATS)    │ │  │
+                         │  │  │  └────────────┘              │            │ │  │
+                         │  │  │                              │            │ │  │
+                         │  │  │  ┌────────────────────────────────────┐   │ │  │
+                         │  │  │  │  KEDA · Prometheus · Grafana       │   │ │  │
+                         │  │  │  └────────────────────────────────────┘   │ │  │
                          │  │  │                                          │ │  │
                          │  │  │  ┌──────────────┐  ┌─────────────────┐   │ │  │
                          │  │  │  │  CPU Nodes   │  │  GPU Nodes      │   │ │  │
@@ -157,9 +163,13 @@ aws ecr get-login-password --region $(terraform output -raw aws_region 2>/dev/nu
 docker tag sie-server:latest $(terraform output -raw ecr_server_repository_url):latest
 docker push $(terraform output -raw ecr_server_repository_url):latest
 
-# Push router image
-docker tag sie-router:latest $(terraform output -raw ecr_router_repository_url):latest
-docker push $(terraform output -raw ecr_router_repository_url):latest
+# Push gateway image
+docker tag sie-gateway:latest $(terraform output -raw ecr_gateway_repository_url):latest
+docker push $(terraform output -raw ecr_gateway_repository_url):latest
+
+# Push sie-config image
+docker tag sie-config:latest $(terraform output -raw ecr_config_repository_url):latest
+docker push $(terraform output -raw ecr_config_repository_url):latest
 ```
 
 ## Security features

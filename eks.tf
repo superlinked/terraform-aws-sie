@@ -118,6 +118,18 @@ module "eks" {
         instance_types = ["t3.xlarge"]            # 4 vCPU, 16GB
         ami_type       = "AL2023_x86_64_STANDARD" # Amazon Linux 2023
 
+        # 100GB root volume — obs stack + EKS addons exceed 20GB default
+        block_device_mappings = {
+          xvda = {
+            device_name = "/dev/xvda"
+            ebs = {
+              volume_size           = 100
+              volume_type           = "gp3"
+              delete_on_termination = true
+            }
+          }
+        }
+
         iam_role_additional_policies = {
           AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
         }

@@ -48,7 +48,8 @@ resource "aws_iam_role_policy" "sie_ecr_access" {
         ]
         Resource = [
           aws_ecr_repository.server.arn,
-          aws_ecr_repository.router.arn
+          aws_ecr_repository.gateway.arn,
+          aws_ecr_repository.config.arn
         ]
       }
     ]
