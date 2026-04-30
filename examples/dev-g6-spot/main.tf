@@ -5,7 +5,7 @@
 # Terraform = cloud infra only. K8s resources deployed via Helm:
 #
 #   $(terraform output -raw kubectl_config_command)
-#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.0 \
+#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.1 \
 #     --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=$(terraform output -raw sie_irsa_role_arn)
 #
 # Prerequisites:
@@ -51,7 +51,7 @@ provider "aws" {
 
 module "sie_eks" {
   source  = "superlinked/sie/aws"
-  version = "0.3.0"
+  version = "0.3.1"
 
   aws_region        = var.aws_region
   project_name      = var.project_name
