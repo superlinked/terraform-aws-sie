@@ -28,6 +28,20 @@ variable "config_ecr_repository_name" {
   default     = "sie-config"
 }
 
+# When false, the module skips `aws_ecr_repository` resource creation
+# but still emits the ecr_*_repository_url / _arn outputs (composed
+# from caller identity + the repo-name variables). Set false on
+# accounts where the ECR repos are managed by another stack so a
+# fresh `terraform apply` doesn't trip on
+# RepositoryAlreadyExistsException, and `terraform destroy` doesn't
+# delete repos other clusters depend on. IRSA + helm wiring is
+# unchanged either way.
+variable "create_ecr_repositories" {
+  description = "Whether this module manages the ECR repositories. Default true; set false on accounts where ECR is owned by another stack."
+  type        = bool
+  default     = true
+}
+
 # =============================================================================
 # SIE Application Configuration
 # =============================================================================
@@ -110,4 +124,32 @@ variable "gpu_node_groups" {
     condition     = alltrue([for g in var.gpu_node_groups : g.name != "cpu"])
     error_message = "gpu_node_groups[*].name must not be \"cpu\" (reserved for the system node group)"
   }
+}
+
+# =============================================================================
+# Model cache (S3)
+# =============================================================================
+
+variable "create_model_cache" {
+  description = "Whether to create the S3 bucket used as the cluster model cache (clusterCache.url in the Helm chart). Default false; flip to true to opt in."
+  type        = bool
+  default     = false
+}
+
+variable "model_cache_bucket_name" {
+  description = "Override for the model cache bucket name. When null, generates <project_name>-model-cache-<random 4-byte hex>. Ignored when create_model_cache is false."
+  type        = string
+  default     = null
+}
+
+variable "model_cache_versioning_enabled" {
+  description = "Enable S3 versioning on the model cache bucket. Default false; HF cache files are immutable per (repo, sha) so versioning costs storage with no benefit."
+  type        = bool
+  default     = false
+}
+
+variable "model_cache_kms_key_id" {
+  description = "KMS key ARN for SSE-KMS on the model cache bucket. When null, uses SSE-S3 (AES256). Public model weights typically don't need KMS."
+  type        = string
+  default     = null
 }

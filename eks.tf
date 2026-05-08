@@ -84,23 +84,35 @@ module "eks" {
   # Cluster logging - enable all log types for audit and debugging
   enabled_log_types = ["audit", "api", "authenticator", "controllerManager", "scheduler"]
 
-  # Essential EKS add-ons for node health
-  # before_compute = true installs addons BEFORE node groups
+  # Essential EKS add-ons for node health.
+  # `before_compute = true` installs the addon before node groups
+  # come up. `resolve_conflicts_on_*` = OVERWRITE so an addon being
+  # recreated from a tainted state takes ownership of the existing
+  # in-cluster resources (e.g. ebs-csi-controller-sa annotations)
+  # instead of erroring with ConfigurationConflict.
   addons = {
     vpc-cni = {
-      most_recent    = true
-      before_compute = true
+      most_recent                 = true
+      before_compute              = true
+      resolve_conflicts_on_create = "OVERWRITE"
+      resolve_conflicts_on_update = "OVERWRITE"
     }
     coredns = {
-      most_recent = true
+      most_recent                 = true
+      resolve_conflicts_on_create = "OVERWRITE"
+      resolve_conflicts_on_update = "OVERWRITE"
     }
     kube-proxy = {
-      most_recent    = true
-      before_compute = true
+      most_recent                 = true
+      before_compute              = true
+      resolve_conflicts_on_create = "OVERWRITE"
+      resolve_conflicts_on_update = "OVERWRITE"
     }
     aws-ebs-csi-driver = {
-      most_recent              = true
-      service_account_role_arn = module.ebs_csi_irsa.arn
+      most_recent                 = true
+      service_account_role_arn    = module.ebs_csi_irsa.arn
+      resolve_conflicts_on_create = "OVERWRITE"
+      resolve_conflicts_on_update = "OVERWRITE"
     }
   }
 
@@ -187,6 +199,18 @@ module "eks" {
         tags = {
           "k8s.io/cluster-autoscaler/enabled"             = "true"
           "k8s.io/cluster-autoscaler/${var.project_name}" = "owned"
+          # Node-template hints — without these, cluster-autoscaler
+          # doesn't know that nodes from this ASG will carry the
+          # `sie.superlinked.com/node-type=gpu` label and the
+          # `nvidia.com/gpu=present:NoSchedule` taint, so it refuses
+          # to scale up for GPU pods (logs "cannot put pod on any
+          # node" / no TriggerScaleUp event). EKS managed nodegroups
+          # apply labels/taints via kubelet args at boot but DON'T
+          # auto-mirror them into the ASG tags that CA reads at
+          # simulation time. See cluster-autoscaler/cloudprovider/aws
+          # README, "Auto-Discovery Setup".
+          "k8s.io/cluster-autoscaler/node-template/label/sie.superlinked.com/node-type" = "gpu"
+          "k8s.io/cluster-autoscaler/node-template/taint/nvidia.com/gpu"                = "present:NoSchedule"
         }
 
         timeouts = {

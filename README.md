@@ -31,7 +31,7 @@ That's it. After apply, configure kubectl and deploy SIE via Helm:
 $(terraform output -raw kubectl_config_command)
 
 # Deploy SIE (gateway, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.1 \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.2 \
   -f values-aws.yaml \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)"
@@ -85,6 +85,7 @@ No variables are strictly required — all have sensible defaults. Override thes
 | `server_ecr_repository_name` | `sie-server` | ECR repo name for the inference server |
 | `gateway_ecr_repository_name` | `sie-gateway` | ECR repo name for the request gateway |
 | `config_ecr_repository_name` | `sie-config` | ECR repo name for the sie-config control plane image |
+| `create_ecr_repositories` | `true` | Whether this module manages the ECR repos. Set `false` if the same ECR repos are already managed by another stack in the same account; the module still emits the `ecr_*_repository_url` outputs (composed from caller identity + repo names) so IRSA / Helm wiring is unchanged either way. |
 
 ### Workload identity
 
@@ -184,6 +185,15 @@ This module follows AWS security best practices out of the box:
 - **GPU taints** — GPU nodes are tainted so only GPU workloads schedule on them
 - **Image scanning** — ECR scans images on push for known vulnerabilities
 - **Audit logging** — all EKS control plane log types enabled
+
+## Bring-your-own components
+
+Some pieces of a production deployment are intentionally not turnkey — either because they're cluster-wide / cross-stack concerns (registry, OIDC) or because they require domains and DNS records that only you can own (TLS, DNS). This module lets you opt out where it makes sense and points at the right knobs.
+
+- **Container registry** — optional. The module manages ECR repos by default (`create_ecr_repositories = true`, see [`infra/variables.tf:39`](infra/variables.tf)). Set `create_ecr_repositories = false` to reuse repos managed by another stack in the same account; the module still emits `ecr_*_repository_url` outputs (composed from caller identity + repo names) so IRSA / Helm wiring is unchanged. To use any external registry, point the Helm chart at it via `gateway.image.repository`, `workers.common.image.repository`, and `config.image.repository`.
+- **TLS certificate** — BYO by default. Either supply a `kubernetes.io/tls` Secret and set `ingress.tls.mode: byo`, or install cert-manager once in the cluster and set `ingress.tls.mode: cert-manager` for automated Let's Encrypt issuance via HTTP-01. See the [chart README's TLS / HTTPS section](../../helm/sie-cluster/README.md#tls--https). DNS-01 / wildcard / ACM paths are out of scope for the chart.
+- **DNS / domain** — always BYO. This module does not provision Route53 zones or records. After `terraform apply`, take the ingress controller's LoadBalancer hostname (`kubectl -n ingress-nginx get svc ingress-nginx-controller`) and create an A/AAAA record pointing at it under a domain you control.
+- **OIDC provider** — BYO. When `auth.enabled: true` in the chart, set `auth.oauth2Proxy.oidcIssuerUrl` and the corresponding client ID / secret to your existing identity provider (Okta, Auth0, Google Workspace, Azure AD, …). The module does not create an IdP.
 
 ## Cleanup
 

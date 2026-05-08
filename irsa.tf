@@ -47,12 +47,49 @@ resource "aws_iam_role_policy" "sie_ecr_access" {
           "ecr:BatchCheckLayerAvailability"
         ]
         Resource = [
-          aws_ecr_repository.server.arn,
-          aws_ecr_repository.gateway.arn,
-          aws_ecr_repository.config.arn
+          local.ecr_server_repository_arn,
+          local.ecr_gateway_repository_arn,
+          local.ecr_config_repository_arn
         ]
       }
     ]
+  })
+}
+
+# Inline policy for read-only access to the model cache bucket.
+# Created only when var.create_model_cache is true.
+resource "aws_iam_role_policy" "sie_model_cache_ro" {
+  count = var.create_model_cache ? 1 : 0
+
+  name = "${var.project_name}-model-cache-ro"
+  role = module.sie_irsa_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      [
+        {
+          Sid      = "ListModelCache"
+          Effect   = "Allow"
+          Action   = ["s3:ListBucket"]
+          Resource = module.model_cache_bucket[0].s3_bucket_arn
+        },
+        {
+          Sid      = "ReadModelCache"
+          Effect   = "Allow"
+          Action   = ["s3:GetObject"]
+          Resource = "${module.model_cache_bucket[0].s3_bucket_arn}/*"
+        }
+      ],
+      local.normalized_model_cache_kms_key_id == null ? [] : [
+        {
+          Sid      = "DecryptModelCacheObjects"
+          Effect   = "Allow"
+          Action   = ["kms:Decrypt", "kms:DescribeKey"]
+          Resource = local.normalized_model_cache_kms_key_id
+        }
+      ]
+    )
   })
 }
 

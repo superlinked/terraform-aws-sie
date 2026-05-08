@@ -5,8 +5,12 @@
 # Terraform = cloud infra only. K8s resources deployed via Helm:
 #
 #   $(terraform output -raw kubectl_config_command)
-#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.1 \
-#     --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=$(terraform output -raw sie_irsa_role_arn)
+#   # Populate the model cache bucket (only if create_model_cache=true):
+#   sie-admin cache populate --bundle default \
+#     --target $(terraform output -raw model_cache_bucket_url)/
+#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.2 \
+#     --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=$(terraform output -raw sie_irsa_role_arn) \
+#     $(terraform output -raw model_cache_helm_args)
 #
 # Prerequisites:
 #   1. AWS credentials configured (aws configure or environment variables)
@@ -51,7 +55,7 @@ provider "aws" {
 
 module "sie_eks" {
   source  = "superlinked/sie/aws"
-  version = "0.3.1"
+  version = "0.3.2"
 
   aws_region        = var.aws_region
   project_name      = var.project_name
@@ -59,6 +63,8 @@ module "sie_eks" {
   gpu_capacity_type = "SPOT"
   gpu_min_size      = 0
   gpu_max_size      = 5
+
+  create_model_cache = true # creates an S3 bucket; remove or set to false to skip
 }
 
 # =============================================================================
@@ -94,4 +100,14 @@ output "cluster_autoscaler_irsa_role_arn" {
 output "workload_identity_annotation" {
   description = "Helm --set value for IRSA role-ARN annotation"
   value       = "eks.amazonaws.com/role-arn=${module.sie_eks.sie_irsa_role_arn}"
+}
+
+output "model_cache_bucket_url" {
+  description = "S3 URL — pass to Helm as workers.common.clusterCache.url"
+  value       = module.sie_eks.model_cache_bucket_url
+}
+
+output "model_cache_helm_args" {
+  description = "Helm --set arguments to enable the cluster cache"
+  value       = "--set workers.common.clusterCache.enabled=true --set workers.common.clusterCache.url=${module.sie_eks.model_cache_bucket_url}"
 }

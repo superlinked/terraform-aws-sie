@@ -45,15 +45,29 @@ output "gpu_capacity_type" {
 
 output "ecr_server_repository_url" {
   description = "ECR repository URL for sie-server images"
-  value       = aws_ecr_repository.server.repository_url
+  value       = local.ecr_server_repository_url
 }
 
 output "ecr_gateway_repository_url" {
   description = "ECR repository URL for sie-gateway images"
-  value       = aws_ecr_repository.gateway.repository_url
+  value       = local.ecr_gateway_repository_url
 }
 
 output "ecr_config_repository_url" {
   description = "ECR repository URL for sie-config images"
-  value       = aws_ecr_repository.config.repository_url
+  value       = local.ecr_config_repository_url
+}
+
+# =============================================================================
+# Model cache (S3)
+# =============================================================================
+
+output "model_cache_bucket_name" {
+  description = "Name of the S3 bucket used as the cluster model cache (null when create_model_cache=false)."
+  value       = try(module.model_cache_bucket[0].s3_bucket_id, null)
+}
+
+output "model_cache_bucket_url" {
+  description = "S3 URL of the model cache bucket WITH the /models prefix — pass to Helm as workers.common.clusterCache.url, and to sie-admin as --target."
+  value       = try("s3://${module.model_cache_bucket[0].s3_bucket_id}/models", null)
 }
