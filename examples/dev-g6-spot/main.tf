@@ -8,7 +8,7 @@
 #   # Populate the model cache bucket (only if create_model_cache=true):
 #   sie-admin cache populate --bundle default \
 #     --target $(terraform output -raw model_cache_bucket_url)/
-#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.2 \
+#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.3 \
 #     --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=$(terraform output -raw sie_irsa_role_arn) \
 #     $(terraform output -raw model_cache_helm_args)
 #
@@ -55,7 +55,7 @@ provider "aws" {
 
 module "sie_eks" {
   source  = "superlinked/sie/aws"
-  version = "0.3.2"
+  version = "0.3.3"
 
   aws_region        = var.aws_region
   project_name      = var.project_name
