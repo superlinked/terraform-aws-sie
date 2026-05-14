@@ -1,6 +1,6 @@
 # SIE EKS Cluster — Development Example (G6 Spot)
 #
-# Creates an EKS cluster with g6.xlarge spot GPU nodes (NVIDIA L4),
+# Creates an EKS cluster with g6.2xlarge spot GPU nodes (NVIDIA L4),
 # scale-to-zero (min=0), and up to 5 GPU nodes.
 # Terraform = cloud infra only. K8s resources deployed via Helm:
 #
@@ -8,13 +8,17 @@
 #   # Populate the model cache bucket (only if create_model_cache=true):
 #   sie-admin cache populate --bundle default \
 #     --target $(terraform output -raw model_cache_bucket_url)/
-#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.3 \
+#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.4 \
 #     --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=$(terraform output -raw sie_irsa_role_arn) \
 #     $(terraform output -raw model_cache_helm_args)
+#   # No extra --set is required for the payload store: the chart auto-derives
+#   # payloadStore.url to "<clusterCache.url>/payloads" and the terraform
+#   # module grants the workload IRSA role RW access on the /payloads/ prefix.
+#   # Override only if you want a separate bucket: --set payloadStore.url=s3://other-bucket/prefix
 #
 # Prerequisites:
 #   1. AWS credentials configured (aws configure or environment variables)
-#   2. EC2 quota for g6.xlarge in the target region
+#   2. EC2 quota for g6.2xlarge in the target region
 #   3. SIE Docker images pushed to ECR (mise run cluster create --provider aws --name dev-g6-spot)
 #
 # Usage:
@@ -27,7 +31,7 @@
 #   terraform destroy
 
 terraform {
-  required_version = "~> 1.14.3"
+  required_version = ">= 1.14"
 
   # Uncomment to use S3 remote state (run deploy/terraform/aws/bootstrap first)
   # backend "s3" {
@@ -55,16 +59,18 @@ provider "aws" {
 
 module "sie_eks" {
   source  = "superlinked/sie/aws"
-  version = "0.3.3"
+  version = "0.3.4"
 
   aws_region        = var.aws_region
   project_name      = var.project_name
-  gpu_instance_type = "g6.xlarge"
+  gpu_instance_type = "g6.2xlarge"
   gpu_capacity_type = "SPOT"
   gpu_min_size      = 0
   gpu_max_size      = 5
 
   create_model_cache = true # creates an S3 bucket; remove or set to false to skip
+  # creates account-scoped ECR repos (sie-dev/sie-server etc.); remove or set false to skip
+  create_ecr_repositories = true
 }
 
 # =============================================================================

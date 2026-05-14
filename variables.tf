@@ -37,9 +37,15 @@ variable "config_ecr_repository_name" {
 # delete repos other clusters depend on. IRSA + helm wiring is
 # unchanged either way.
 variable "create_ecr_repositories" {
-  description = "Whether this module manages the ECR repositories. Default true; set false on accounts where ECR is owned by another stack."
+  description = "Whether this module manages the ECR repositories. Default `false` — matches the chart's GHCR-by-default behaviour and avoids `RepositoryAlreadyExistsException` on accounts where the repos already exist. Set `true` to opt in to terraform-managed ECR. The `ecr_*_repository_url` outputs are emitted either way (composed from caller identity + repo names) so IRSA / Helm wiring works regardless of who creates the repos."
   type        = bool
-  default     = true
+  default     = false
+}
+
+variable "ecr_repository_prefix" {
+  description = "Namespace prefix for ECR repository names — final names become \"<prefix>/<repo_name>\". When null (default), prefix is var.project_name so two engineers using project_name=sie-dev-laszlo and project_name=sie-dev-bob don't collide. Set to empty string \"\" to disable the prefix (use bare names — needed when ECR repos are managed externally with bare names, e.g. sie-perf-lab phase 04)."
+  type        = string
+  default     = null
 }
 
 # =============================================================================

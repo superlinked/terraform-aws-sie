@@ -9,7 +9,7 @@ One command to get a GPU-ready EKS cluster for [SIE](https://github.com/superlin
 - **Scale-to-zero** — GPU nodes scale down to zero when idle, so you only pay when running inference
 - **Cluster Autoscaler** — automatically scales node groups based on pending pod demand
 - **NVIDIA device plugin** — pre-installed so GPU pods schedule immediately
-- **ECR repositories** — private container registries for `sie-server` and `sie-gateway` images
+- **ECR repositories** (opt-in) — private container registries, project-scoped names (`<project_name>/sie-server`, …). Off by default; set `create_ecr_repositories = true` to opt in.
 - **IRSA** (IAM Roles for Service Accounts) — pods authenticate to AWS without stored credentials
 - **VPC endpoints** — private connectivity to ECR, S3, STS, and other AWS services
 - **EBS CSI driver** — persistent volumes work out of the box
@@ -31,7 +31,7 @@ That's it. After apply, configure kubectl and deploy SIE via Helm:
 $(terraform output -raw kubectl_config_command)
 
 # Deploy SIE (gateway, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.3 \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.4 \
   -f values-aws.yaml \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)"
@@ -85,7 +85,8 @@ No variables are strictly required — all have sensible defaults. Override thes
 | `server_ecr_repository_name` | `sie-server` | ECR repo name for the inference server |
 | `gateway_ecr_repository_name` | `sie-gateway` | ECR repo name for the request gateway |
 | `config_ecr_repository_name` | `sie-config` | ECR repo name for the sie-config control plane image |
-| `create_ecr_repositories` | `true` | Whether this module manages the ECR repos. Set `false` if the same ECR repos are already managed by another stack in the same account; the module still emits the `ecr_*_repository_url` outputs (composed from caller identity + repo names) so IRSA / Helm wiring is unchanged either way. |
+| `create_ecr_repositories` | `false` | Whether this module manages the ECR repos. Default `false` matches the chart's GHCR-by-default behaviour and avoids `RepositoryAlreadyExistsException` on accounts where the repos already exist. Set `true` to opt in. The `ecr_*_repository_url` outputs are emitted regardless. |
+| `ecr_repository_prefix` | `null` → `<project_name>` | Namespace prefix for ECR repo names; final names become `<prefix>/<repo_name>`. Set to `""` to disable prefixing (bare names) for accounts where ECR is externally managed. |
 
 ### Workload identity
 
@@ -153,6 +154,8 @@ After `terraform apply`, use these outputs to connect and deploy:
 ## Pushing images to ECR
 > This is optional, because the official image is available at `ghcr.io/superlinked/`.
 
+Requires `create_ecr_repositories = true` (or repos managed by another stack — see `ecr_repository_prefix`).
+
 After `terraform apply`, push your SIE Docker images:
 
 ```bash
@@ -173,6 +176,31 @@ docker tag sie-config:latest $(terraform output -raw ecr_config_repository_url):
 docker push $(terraform output -raw ecr_config_repository_url):latest
 ```
 
+## Model cache and payload store
+
+SIE clusters benefit from two object-store backed features that share a single S3 bucket:
+
+- **Model cache**: pre-staged model weights at `s3://<bucket>/models/`, so workers cold-start from object storage rather than re-downloading from Hugging Face on every pod spin-up.
+- **Payload store**: large work-item payloads (images, long documents that exceed the 1 MiB NATS in-band budget) at `s3://<bucket>/payloads/`, written by the gateway and read once by the worker. Garbage-collected by a runtime TTL plus a bucket lifecycle rule.
+
+Set `create_model_cache = true` and the module:
+
+1. Provisions a managed S3 bucket with versioning, abort-incomplete-multipart, and a lifecycle rule that deletes objects under the `payloads/` prefix after one day.
+2. Attaches two scoped inline policies to the SIE workload IRSA role: read-only on the cache, and `s3:Get/Put/Delete/AbortMultipartUpload` constrained to the `payloads/*` prefix, with a `ListBucket` prefix condition.
+3. KMS-encrypted buckets get matching `kms:Decrypt/Encrypt/GenerateDataKey` grants.
+
+After apply, pass the bucket into Helm with one terraform output:
+
+```bash
+helm upgrade --install sie-cluster ../../deploy/helm/sie-cluster \
+  --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)" \
+  $(terraform output -raw model_cache_helm_args)
+```
+
+The chart auto-derives `payloadStore.url` from `workers.common.clusterCache.url`, so a single `--set` for the cache covers both features. Operators who do not opt in (`create_model_cache = false`, default) skip the bucket and IAM additions entirely; the chart treats the absence as "payload store off".
+
+See `infra/s3_model_cache.tf` and `infra/irsa.tf` for the resource definitions.
+
 ## Security features
 
 This module follows AWS security best practices out of the box:
@@ -190,7 +218,7 @@ This module follows AWS security best practices out of the box:
 
 Some pieces of a production deployment are intentionally not turnkey — either because they're cluster-wide / cross-stack concerns (registry, OIDC) or because they require domains and DNS records that only you can own (TLS, DNS). This module lets you opt out where it makes sense and points at the right knobs.
 
-- **Container registry** — optional. The module manages ECR repos by default (`create_ecr_repositories = true`, see [`infra/variables.tf:39`](infra/variables.tf)). Set `create_ecr_repositories = false` to reuse repos managed by another stack in the same account; the module still emits `ecr_*_repository_url` outputs (composed from caller identity + repo names) so IRSA / Helm wiring is unchanged. To use any external registry, point the Helm chart at it via `gateway.image.repository`, `workers.common.image.repository`, and `config.image.repository`.
+- **Container registry** — optional. The module does **not** create ECR repos by default (`create_ecr_repositories = false`, see [`infra/variables.tf`](infra/variables.tf)) — this matches the chart's GHCR-by-default behaviour and avoids `RepositoryAlreadyExistsException` on accounts where repos already exist. Set `create_ecr_repositories = true` to opt in to terraform-managed ECR; the module will create project-scoped repos (`<project_name>/sie-server`, `<project_name>/sie-gateway`, `<project_name>/sie-config`). Override the namespace via `ecr_repository_prefix` — set to `""` to disable prefixing for accounts where ECR is externally managed under bare names. The module always emits `ecr_*_repository_url` outputs (composed from caller identity + repo names) so IRSA / Helm wiring is unchanged whether you opt in or not. To use any external registry, point the Helm chart at it via `gateway.image.repository`, `workers.common.image.repository`, and `config.image.repository`.
 - **TLS certificate** — BYO by default. Either supply a `kubernetes.io/tls` Secret and set `ingress.tls.mode: byo`, or install cert-manager once in the cluster and set `ingress.tls.mode: cert-manager` for automated Let's Encrypt issuance via HTTP-01. See the [chart README's TLS / HTTPS section](../../helm/sie-cluster/README.md#tls--https). DNS-01 / wildcard / ACM paths are out of scope for the chart.
 - **DNS / domain** — always BYO. This module does not provision Route53 zones or records. After `terraform apply`, take the ingress controller's LoadBalancer hostname (`kubectl -n ingress-nginx get svc ingress-nginx-controller`) and create an A/AAAA record pointing at it under a domain you control.
 - **OIDC provider** — BYO. When `auth.enabled: true` in the chart, set `auth.oauth2Proxy.oidcIssuerUrl` and the corresponding client ID / secret to your existing identity provider (Okta, Auth0, Google Workspace, Azure AD, …). The module does not create an IdP.

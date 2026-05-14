@@ -1,21 +1,21 @@
 # Development Cluster with G6 Spot GPUs
 
-Creates a minimal EKS cluster with a single g6.xlarge spot GPU node group (NVIDIA L4) — ideal for development and testing SIE (Search Inference Engine) workloads at low cost.
+Creates a minimal EKS cluster with a single g6.2xlarge spot GPU node group (NVIDIA L4) — ideal for development and testing SIE (Search Inference Engine) workloads at low cost.
 
 ## What this example creates
 
 | Resource | Configuration |
 |----------|---------------|
 | EKS cluster | Private subnets, KMS-encrypted secrets, Kubernetes 1.35 |
-| GPU node group | 1x NVIDIA L4 per node (g6.xlarge), spot instances, scale 0-5 |
+| GPU node group | 1x NVIDIA L4 per node (g6.2xlarge), spot instances, scale 0-5 |
 | CPU node group | t3.xlarge (system workloads), scale 1-5 |
 | VPC | 2 AZs, public + private subnets, NAT gateway, VPC endpoints |
-| ECR | Repositories for `sie-server`, `sie-gateway`, and `sie-config` images |
+| ECR | Account-scoped repositories: `<project_name>/sie-server`, `<project_name>/sie-gateway`, `<project_name>/sie-config` |
 | Cluster Autoscaler | Auto-scales node groups based on pending pods |
 | NVIDIA device plugin | GPU scheduling support |
 | IRSA | IAM roles for SIE and EBS CSI driver |
 
-**Estimated cost**: ~$0.30/hr when a GPU node is running. Near $0/hr when scaled to zero (only EKS control plane fee applies).
+**Estimated cost**: ~$0.50/hr when a GPU node is running (g6.2xlarge spot, eu-central-1). Near $0/hr when scaled to zero (only EKS control plane fee applies).
 
 ## Usage
 
@@ -32,7 +32,7 @@ After apply, deploy SIE via Helm:
 $(terraform output -raw kubectl_config_command)
 
 # Install SIE (gateway, sie-config, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.3 \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.4 \
   --namespace sie --create-namespace \
   -f values-aws.yaml \
   --create-namespace -n sie \
@@ -91,7 +91,7 @@ module "sie_eks" {
 ## Prerequisites
 
 1. AWS credentials configured (`aws configure` or environment variables)
-2. EC2 quota for `g6.xlarge` in your target region
+2. EC2 quota for `g6.2xlarge` in your target region
 3. Terraform >= 1.14
 
 ## Cleanup

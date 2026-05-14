@@ -68,6 +68,11 @@ output "model_cache_bucket_name" {
 }
 
 output "model_cache_bucket_url" {
-  description = "S3 URL of the model cache bucket WITH the /models prefix — pass to Helm as workers.common.clusterCache.url, and to sie-admin as --target."
+  description = "S3 URL of the model cache bucket WITH the /models prefix - pass to Helm as workers.common.clusterCache.url, and to sie-admin as --target."
   value       = try("s3://${module.model_cache_bucket[0].s3_bucket_id}/models", null)
+}
+
+output "payload_store_url" {
+  description = "S3 URL of the payload store (the model cache bucket under the /payloads prefix). The chart auto-derives this from clusterCache.url, so a Helm install does not need to set it; output is exposed for visibility and for the rare override case."
+  value       = try("s3://${module.model_cache_bucket[0].s3_bucket_id}/payloads", "")
 }

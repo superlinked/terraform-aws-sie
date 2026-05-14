@@ -93,6 +93,57 @@ resource "aws_iam_role_policy" "sie_model_cache_ro" {
   })
 }
 
+# Inline policy granting RW access to the /payloads/ prefix of the model
+# cache bucket. The gateway offloads work items larger than 1MB there and
+# workers fetch them back; without this grant any request >1MB silently
+# fails with "all_items_failed" at the worker. Scoped to /payloads/* and
+# guarded by an s3:prefix condition on ListBucket so it cannot read or
+# write model weights.
+resource "aws_iam_role_policy" "sie_payload_store_rw" {
+  count = var.create_model_cache ? 1 : 0
+
+  name = "${var.project_name}-payload-store-rw"
+  role = module.sie_irsa_role.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      [
+        {
+          Sid      = "ListPayloadStorePrefix"
+          Effect   = "Allow"
+          Action   = ["s3:ListBucket"]
+          Resource = module.model_cache_bucket[0].s3_bucket_arn
+          Condition = {
+            StringLike = {
+              "s3:prefix" = ["payloads/*"]
+            }
+          }
+        },
+        {
+          Sid    = "ReadWritePayloadObjects"
+          Effect = "Allow"
+          Action = [
+            "s3:GetObject",
+            "s3:PutObject",
+            "s3:DeleteObject",
+            "s3:AbortMultipartUpload",
+          ]
+          Resource = "${module.model_cache_bucket[0].s3_bucket_arn}/payloads/*"
+        },
+      ],
+      local.normalized_model_cache_kms_key_id == null ? [] : [
+        {
+          Sid      = "EncryptDecryptPayloadObjects"
+          Effect   = "Allow"
+          Action   = ["kms:Decrypt", "kms:DescribeKey", "kms:Encrypt", "kms:GenerateDataKey"]
+          Resource = local.normalized_model_cache_kms_key_id
+        }
+      ]
+    )
+  })
+}
+
 # IAM Role for EBS CSI Driver
 module "ebs_csi_irsa" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts"

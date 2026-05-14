@@ -26,27 +26,28 @@ run "validate_ecr_repositories" {
 
   variables {
     project_name                = "sie-test"
+    create_ecr_repositories     = true
     server_ecr_repository_name  = "sie-server"
     gateway_ecr_repository_name = "sie-gateway"
     config_ecr_repository_name  = "sie-config"
   }
 
-  # ECR server repository should be created
+  # ECR server repository should be created with project_name prefix
   assert {
-    condition     = aws_ecr_repository.server.name == "sie-server"
-    error_message = "ECR server repository name should match variable"
+    condition     = aws_ecr_repository.server[0].name == "sie-test/sie-server"
+    error_message = "ECR server repository name should be prefixed with project_name"
   }
 
-  # ECR gateway repository should be created
+  # ECR gateway repository should be created with project_name prefix
   assert {
-    condition     = aws_ecr_repository.gateway.name == "sie-gateway"
-    error_message = "ECR gateway repository name should match variable"
+    condition     = aws_ecr_repository.gateway[0].name == "sie-test/sie-gateway"
+    error_message = "ECR gateway repository name should be prefixed with project_name"
   }
 
-  # ECR config repository should be created (sie-config control plane image)
+  # ECR config repository should be created with project_name prefix
   assert {
-    condition     = aws_ecr_repository.config.name == "sie-config"
-    error_message = "ECR config repository name should match variable"
+    condition     = aws_ecr_repository.config[0].name == "sie-test/sie-config"
+    error_message = "ECR config repository name should be prefixed with project_name"
   }
 }
 

@@ -2,6 +2,13 @@
 # Workers read via the workload IRSA role (read-only, scoped to this bucket).
 # Operators populate from a laptop with `sie-admin cache populate --target s3://.../models/`.
 # Opt-in: gated on var.create_model_cache.
+#
+# Dual-use: the same bucket also serves as the default payload store under the
+# /payloads prefix. The gateway offloads work items >1MB there, and workers
+# fetch them back. RW access on /payloads/* is granted in irsa.tf and a 1-day
+# lifecycle rule (below) garbage-collects stale payloads. The chart's runtime
+# TTL (payloadStore.ttlSeconds, default 300s) handles fine-grained eviction;
+# S3 lifecycle is day-granularity only and acts as the long-tail GC.
 
 locals {
   # Normalize optional string inputs: treat null and whitespace-only the same.
@@ -66,7 +73,13 @@ module "model_cache_bucket" {
     enabled = var.model_cache_versioning_enabled
   }
 
-  # Lifecycle: clean up failed multipart uploads after 7 days.
+  # Lifecycle rules:
+  #   1. abort-incomplete-multipart: clean up failed multipart uploads after 7 days.
+  #   2. expire-payloads: GC the /payloads/ prefix after 1 day. The runtime TTL
+  #      on the gateway (payloadStore.ttlSeconds, default 300s) handles
+  #      fine-grained eviction; S3 lifecycle is day-granularity only and acts
+  #      as the long-tail garbage collector for orphans (e.g. gateway crash
+  #      between PutObject and queue ack).
   # Note: terraform-aws-modules/s3-bucket v5 expects the flat key
   # `abort_incomplete_multipart_upload_days`; the nested object form is silently
   # ignored and produces a rule with no actions (AWS InvalidRequest at apply).
@@ -75,6 +88,16 @@ module "model_cache_bucket" {
       id                                     = "abort-incomplete-multipart"
       enabled                                = true
       abort_incomplete_multipart_upload_days = 7
+    },
+    {
+      id      = "expire-payloads"
+      enabled = true
+      filter = {
+        prefix = "payloads/"
+      }
+      expiration = {
+        days = 1
+      }
     }
   ]
 
