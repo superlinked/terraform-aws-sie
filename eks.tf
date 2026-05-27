@@ -56,6 +56,24 @@ resource "aws_kms_alias" "eks_secrets" {
   target_key_id = aws_kms_key.eks_secrets.key_id
 }
 
+locals {
+  kubelet_log_retention_node_config = [
+    {
+      content_type = "application/node.eks.aws"
+      content      = <<-EOT
+        ---
+        apiVersion: node.eks.aws/v1alpha1
+        kind: NodeConfig
+        spec:
+          kubelet:
+            config:
+              containerLogMaxSize: ${var.kubelet_container_log_max_size}
+              containerLogMaxFiles: ${var.kubelet_container_log_max_files}
+      EOT
+    }
+  ]
+}
+
 # EKS Cluster
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
@@ -142,6 +160,8 @@ module "eks" {
           }
         }
 
+        cloudinit_pre_nodeadm = local.kubelet_log_retention_node_config
+
         iam_role_additional_policies = {
           AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
         }
@@ -156,8 +176,15 @@ module "eks" {
     {
       for g in local.effective_gpu_groups :
       g.name => {
-        min_size       = g.min_size
-        max_size       = g.max_size
+        min_size = g.min_size
+        max_size = g.max_size
+        # Seed desired_size from min_size so node groups with min_size >= 2 don't
+        # fail validation (EKS requires min_size <= desired_size <= max_size, and
+        # the upstream module defaults desired_size to 1). Clamp to >=1 so pools
+        # that scale to zero (min_size=0) still match the historical default of
+        # one warm node at create time; the cluster autoscaler manages
+        # desired_size after creation via ignore_changes.
+        desired_size   = max(g.min_size, 1)
         instance_types = [g.instance_type]
         ami_type       = "AL2023_x86_64_NVIDIA"
         capacity_type  = g.capacity_type
@@ -174,6 +201,8 @@ module "eks" {
             }
           }
         }
+
+        cloudinit_pre_nodeadm = local.kubelet_log_retention_node_config
 
         labels = merge(
           {

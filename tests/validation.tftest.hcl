@@ -1,7 +1,11 @@
 # SIE EKS Terraform - Validation Tests
 #
-# Run with: terraform test
+# Run with: terraform -chdir=deploy/terraform/aws/infra test
 # Requires Terraform >= 1.7.0
+
+provider "aws" {
+  region = "eu-central-1"
+}
 
 # =============================================================================
 # Variable Validation Tests (plan-only, no infrastructure)
@@ -62,10 +66,17 @@ run "validate_gpu_node_group_spot" {
     gpu_max_size      = 5
   }
 
-  # GPU node group should use specified instance type
+  # GPU node group should be wired from the plan-known GPU config.
   assert {
-    condition     = module.eks.eks_managed_node_groups["gpu"].node_group_resources[0].autoscaling_groups[0] != null
-    error_message = "GPU node group should be created"
+    condition = (
+      contains(keys(module.eks.eks_managed_node_groups), "gpu")
+      && try(local.effective_gpu_groups[0].instance_type, null) == "g6.xlarge"
+      && try(local.effective_gpu_groups[0].capacity_type, null) == "SPOT"
+      && try(local.effective_gpu_groups[0].min_size, null) == 0
+      && try(local.effective_gpu_groups[0].max_size, null) == 5
+    )
+
+    error_message = "GPU node group should be planned with the requested instance type, capacity type, and scaling bounds"
   }
 }
 
@@ -92,7 +103,7 @@ run "validate_vpc_configuration" {
 
   # VPC should enable DNS hostnames
   assert {
-    condition     = module.vpc.enable_dns_hostnames == true
+    condition     = module.vpc.vpc_enable_dns_hostnames == true
     error_message = "VPC should have DNS hostnames enabled"
   }
 
@@ -100,6 +111,26 @@ run "validate_vpc_configuration" {
   assert {
     condition     = module.vpc.natgw_ids != null
     error_message = "VPC should have NAT gateway for private subnets"
+  }
+
+  # Private worker subnets should be large enough for EKS VPC CNI pod IPs.
+  assert {
+    condition     = alltrue([for cidr in local.private_subnets : tonumber(split("/", cidr)[1]) == 20])
+    error_message = "Private subnets should default to /20 for EKS pod IP headroom"
+  }
+
+  # Public subnets only need room for load balancers/NAT and should not consume
+  # the larger worker subnet space.
+  assert {
+    condition     = alltrue([for cidr in local.public_subnets : tonumber(split("/", cidr)[1]) == 24])
+    error_message = "Public subnets should default to /24"
+  }
+
+  # Keep default public subnets on the historical 10.0.101.0/24 range where
+  # possible so existing load balancer/NAT subnets do not churn unnecessarily.
+  assert {
+    condition     = local.public_subnets == [for i in range(length(local.vpc_azs)) : cidrsubnet(var.vpc_cidr, local.public_subnet_newbits, 101 + i)]
+    error_message = "Default public subnets should preserve the legacy 10.0.101.0/24-style allocation"
   }
 }
 
@@ -112,9 +143,10 @@ run "validate_irsa_role" {
     sie_service_account_name = "sie-server"
   }
 
-  # SIE IRSA role should be created
+  # IRSA-adjacent workload policy should be planned with the expected name.
+  # The IAM role ARN/name from the upstream module is only known after apply.
   assert {
-    condition     = module.sie_irsa_role.arn != null
-    error_message = "SIE IRSA role should be created"
+    condition     = aws_iam_role_policy.sie_ecr_access.name == "sie-test-ecr-access"
+    error_message = "SIE workload ECR policy should follow naming convention: {project_name}-ecr-access"
   }
 }

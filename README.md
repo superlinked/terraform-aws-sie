@@ -31,7 +31,7 @@ That's it. After apply, configure kubectl and deploy SIE via Helm:
 $(terraform output -raw kubectl_config_command)
 
 # Deploy SIE (gateway, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.3.4 \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.4.0 \
   -f values-aws.yaml \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)"
@@ -68,6 +68,23 @@ No variables are strictly required — all have sensible defaults. Override thes
 | `gpu_capacity_type` | `ON_DEMAND` | `ON_DEMAND` or `SPOT` (spot saves ~60-70%) |
 | `gpu_min_size` | `1` | Minimum GPU nodes — set to `0` for scale-to-zero |
 | `gpu_max_size` | `10` | Maximum GPU nodes |
+
+### Networking
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `vpc_cidr` | `10.0.0.0/16` | CIDR block for the EKS VPC |
+| `private_subnet_prefix_length` | `20` | Private worker subnet size; default creates `/20` private subnets for EKS pod IP headroom |
+| `public_subnet_prefix_length` | `24` | Public subnet size; default creates `/24` public subnets for load balancers/NAT |
+
+Changing VPC/subnet sizing is intentionally breaking for existing clusters because AWS subnet CIDRs are replacement-sensitive. Recreate ephemeral clusters or plan a migration window for persistent clusters.
+
+### Node log rotation
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `kubelet_container_log_max_size` | `20Mi` | Per-container kubelet log file size before rotation |
+| `kubelet_container_log_max_files` | `30` | Rotated files retained per container; kubelet retention is size/count based, not hourly |
 
 **GPU instance cheat sheet:**
 
@@ -219,7 +236,12 @@ This module follows AWS security best practices out of the box:
 Some pieces of a production deployment are intentionally not turnkey — either because they're cluster-wide / cross-stack concerns (registry, OIDC) or because they require domains and DNS records that only you can own (TLS, DNS). This module lets you opt out where it makes sense and points at the right knobs.
 
 - **Container registry** — optional. The module does **not** create ECR repos by default (`create_ecr_repositories = false`, see [`infra/variables.tf`](infra/variables.tf)) — this matches the chart's GHCR-by-default behaviour and avoids `RepositoryAlreadyExistsException` on accounts where repos already exist. Set `create_ecr_repositories = true` to opt in to terraform-managed ECR; the module will create project-scoped repos (`<project_name>/sie-server`, `<project_name>/sie-gateway`, `<project_name>/sie-config`). Override the namespace via `ecr_repository_prefix` — set to `""` to disable prefixing for accounts where ECR is externally managed under bare names. The module always emits `ecr_*_repository_url` outputs (composed from caller identity + repo names) so IRSA / Helm wiring is unchanged whether you opt in or not. To use any external registry, point the Helm chart at it via `gateway.image.repository`, `workers.common.image.repository`, and `config.image.repository`.
-- **TLS certificate** — BYO by default. Either supply a `kubernetes.io/tls` Secret and set `ingress.tls.mode: byo`, or install cert-manager once in the cluster and set `ingress.tls.mode: cert-manager` for automated Let's Encrypt issuance via HTTP-01. See the [chart README's TLS / HTTPS section](../../helm/sie-cluster/README.md#tls--https). DNS-01 / wildcard / ACM paths are out of scope for the chart.
+- **TLS certificate** — BYO by default. Set `ingress.tls.mode` to one of:
+  - `byo` — supply your own `kubernetes.io/tls` Secret.
+  - `cert-manager` — install cert-manager once in the cluster; the chart annotates the Ingress for automated Let's Encrypt issuance via HTTP-01.
+  - `self-signed` — for air-gapped clusters; set `certManagerBundle.certManager.install: true` to bundle cert-manager (single-tenant clusters only).
+
+  See the [chart README's TLS / HTTPS section](../../helm/sie-cluster/README.md#tls--https). DNS-01 / wildcard / ACM paths are out of scope for the chart.
 - **DNS / domain** — always BYO. This module does not provision Route53 zones or records. After `terraform apply`, take the ingress controller's LoadBalancer hostname (`kubectl -n ingress-nginx get svc ingress-nginx-controller`) and create an A/AAAA record pointing at it under a domain you control.
 - **OIDC provider** — BYO. When `auth.enabled: true` in the chart, set `auth.oauth2Proxy.oidcIssuerUrl` and the corresponding client ID / secret to your existing identity provider (Okta, Auth0, Google Workspace, Azure AD, …). The module does not create an IdP.
 

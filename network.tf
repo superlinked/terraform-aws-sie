@@ -47,9 +47,25 @@ locals {
   # they may get fewer subnets. gpu_group_subnets filters per group below.
   vpc_azs = slice(local.all_gpu_azs, 0, min(3, length(local.all_gpu_azs)))
 
-  # Dynamic CIDR blocks based on AZ count
-  private_subnets = [for i in range(length(local.vpc_azs)) : cidrsubnet("10.0.0.0/16", 8, i + 1)]
-  public_subnets  = [for i in range(length(local.vpc_azs)) : cidrsubnet("10.0.0.0/16", 8, i + 101)]
+  vpc_prefix_length      = tonumber(split("/", var.vpc_cidr)[1])
+  private_subnet_newbits = var.private_subnet_prefix_length - local.vpc_prefix_length
+  public_subnet_newbits  = var.public_subnet_prefix_length - local.vpc_prefix_length
+
+  public_subnet_total_blocks = pow(2, local.public_subnet_newbits)
+  public_subnet_last_start   = local.public_subnet_total_blocks - length(local.vpc_azs)
+
+  # Preserve the historical 10.0.101.0/24-style public subnet placement when
+  # it does not overlap the larger private worker subnets. If callers choose
+  # larger private blocks, shift public subnets just after the private space.
+  private_space_in_public_blocks = length(local.vpc_azs) * pow(2, local.public_subnet_newbits - local.private_subnet_newbits)
+  public_subnet_legacy_start     = 101
+  public_subnet_netnum_start     = max(local.private_space_in_public_blocks, min(local.public_subnet_legacy_start, local.public_subnet_last_start))
+
+  # Dynamic CIDR blocks based on AZ count. Private subnets are intentionally
+  # much larger than public subnets because EKS pods consume VPC CNI IPs from
+  # the node subnet.
+  private_subnets = [for i in range(length(local.vpc_azs)) : cidrsubnet(var.vpc_cidr, local.private_subnet_newbits, i)]
+  public_subnets  = [for i in range(length(local.vpc_azs)) : cidrsubnet(var.vpc_cidr, local.public_subnet_newbits, local.public_subnet_netnum_start + i)]
 
   # Map AZ → private subnet ID (for per-node-group subnet filtering)
   az_to_private_subnet = zipmap(local.vpc_azs, module.vpc.private_subnets)
@@ -100,12 +116,46 @@ resource "terraform_data" "vpc_az_validation" {
   }
 }
 
+resource "terraform_data" "subnet_sizing_validation" {
+  lifecycle {
+    precondition {
+      condition     = var.private_subnet_prefix_length > local.vpc_prefix_length
+      error_message = "private_subnet_prefix_length must be larger than the VPC prefix length."
+    }
+
+    precondition {
+      condition     = var.public_subnet_prefix_length > local.vpc_prefix_length
+      error_message = "public_subnet_prefix_length must be larger than the VPC prefix length."
+    }
+
+    precondition {
+      condition     = var.public_subnet_prefix_length >= var.private_subnet_prefix_length
+      error_message = "public_subnet_prefix_length must be greater than or equal to private_subnet_prefix_length so public subnets stay smaller than, or equal to, private subnets."
+    }
+
+    precondition {
+      condition     = pow(2, local.private_subnet_newbits) >= length(local.vpc_azs)
+      error_message = "private_subnet_prefix_length must allow at least one private subnet per selected AZ."
+    }
+
+    precondition {
+      condition     = pow(2, local.public_subnet_newbits) >= length(local.vpc_azs)
+      error_message = "public_subnet_prefix_length must leave room for one public subnet per selected AZ."
+    }
+
+    precondition {
+      condition     = local.public_subnet_netnum_start + length(local.vpc_azs) <= local.public_subnet_total_blocks
+      error_message = "VPC CIDR and subnet prefix lengths must leave non-overlapping public subnet space after private subnets."
+    }
+  }
+}
+
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~> 6.6"
 
   name = "${var.project_name}-vpc"
-  cidr = "10.0.0.0/16"
+  cidr = var.vpc_cidr
 
   azs             = local.vpc_azs
   private_subnets = local.private_subnets

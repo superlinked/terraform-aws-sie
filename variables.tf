@@ -49,6 +49,43 @@ variable "ecr_repository_prefix" {
 }
 
 # =============================================================================
+# Networking
+# =============================================================================
+
+variable "vpc_cidr" {
+  description = "CIDR block for the EKS VPC. Existing clusters will replace networking resources if this changes."
+  type        = string
+  default     = "10.0.0.0/16"
+
+  validation {
+    condition     = can(cidrhost(var.vpc_cidr, 0))
+    error_message = "vpc_cidr must be a valid IPv4 CIDR block."
+  }
+}
+
+variable "private_subnet_prefix_length" {
+  description = "CIDR prefix length for private worker subnets. Default /20 gives EKS pod IP headroom for bursty GPU node scale-ups."
+  type        = number
+  default     = 20
+
+  validation {
+    condition     = floor(var.private_subnet_prefix_length) == var.private_subnet_prefix_length && var.private_subnet_prefix_length >= 18 && var.private_subnet_prefix_length <= 22
+    error_message = "private_subnet_prefix_length must be an integer between 18 and 22."
+  }
+}
+
+variable "public_subnet_prefix_length" {
+  description = "CIDR prefix length for public load balancer/NAT subnets. Default /24 keeps public subnet allocation compact."
+  type        = number
+  default     = 24
+
+  validation {
+    condition     = floor(var.public_subnet_prefix_length) == var.public_subnet_prefix_length && var.public_subnet_prefix_length >= 20 && var.public_subnet_prefix_length <= 28
+    error_message = "public_subnet_prefix_length must be an integer between 20 and 28."
+  }
+}
+
+# =============================================================================
 # SIE Application Configuration
 # =============================================================================
 
@@ -129,6 +166,28 @@ variable "gpu_node_groups" {
   validation {
     condition     = alltrue([for g in var.gpu_node_groups : g.name != "cpu"])
     error_message = "gpu_node_groups[*].name must not be \"cpu\" (reserved for the system node group)"
+  }
+}
+
+variable "kubelet_container_log_max_size" {
+  description = "Maximum size of a single kubelet-managed container log file before rotation. Kubelet rotates by size/files, not wall-clock retention."
+  type        = string
+  default     = "20Mi"
+
+  validation {
+    condition     = can(regex("^[1-9][0-9]*(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|K)?$", var.kubelet_container_log_max_size))
+    error_message = "kubelet_container_log_max_size must be a positive whole-number Kubernetes quantity such as 20Mi."
+  }
+}
+
+variable "kubelet_container_log_max_files" {
+  description = "Maximum number of rotated kubelet-managed container log files to retain per container."
+  type        = number
+  default     = 30
+
+  validation {
+    condition     = var.kubelet_container_log_max_files >= 2 && floor(var.kubelet_container_log_max_files) == var.kubelet_container_log_max_files
+    error_message = "kubelet_container_log_max_files must be an integer at least 2."
   }
 }
 
