@@ -10,7 +10,7 @@ Creates a minimal EKS cluster with a single g6.2xlarge spot GPU node group (NVID
 | GPU node group | 1x NVIDIA L4 per node (g6.2xlarge), spot instances, scale 0-5 |
 | CPU node group | t3.xlarge (system workloads), scale 1-5 |
 | VPC | 2 AZs, public + private subnets, NAT gateway, VPC endpoints |
-| ECR | Account-scoped repositories: `<project_name>/sie-server`, `<project_name>/sie-gateway`, `<project_name>/sie-config` |
+| ECR | Account-scoped repositories: `<project_name>/sie-server`, `<project_name>/sie-gateway`, `<project_name>/sie-config`; sidecar uses the Helm chart's GHCR default |
 | Cluster Autoscaler | Auto-scales node groups based on pending pods |
 | NVIDIA device plugin | GPU scheduling support |
 | IRSA | IAM roles for SIE and EBS CSI driver |
@@ -32,7 +32,7 @@ After apply, deploy SIE via Helm:
 $(terraform output -raw kubectl_config_command)
 
 # Install SIE (gateway, sie-config, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.4.1 \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.4.2 \
   --namespace sie --create-namespace \
   -f values-aws.yaml \
   --create-namespace -n sie \
@@ -55,6 +55,9 @@ helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster 
 | `cluster_endpoint` | Kubernetes API endpoint (sensitive) |
 | `sie_irsa_role_arn` | Pass to Helm for workload identity |
 | `cluster_autoscaler_irsa_role_arn` | Cluster autoscaler IAM role |
+| `ecr_server_repository_url` | Push target for `sie-server` images |
+| `ecr_gateway_repository_url` | Push target for `sie-gateway` images |
+| `ecr_config_repository_url` | Push target for `sie-config` images |
 
 ## Customizing
 

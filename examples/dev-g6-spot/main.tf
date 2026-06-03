@@ -8,7 +8,7 @@
 #   # Populate the model cache bucket (only if create_model_cache=true):
 #   sie-admin cache populate --bundle default \
 #     --target $(terraform output -raw model_cache_bucket_url)/
-#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.4.1 \
+#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.4.2 \
 #     --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=$(terraform output -raw sie_irsa_role_arn) \
 #     $(terraform output -raw model_cache_helm_args)
 #   # No extra --set is required for the payload store: the chart auto-derives
@@ -66,7 +66,7 @@ provider "aws" {
 
 module "sie_eks" {
   source  = "superlinked/sie/aws"
-  version = "0.4.1"
+  version = "0.4.2"
 
   aws_region        = var.aws_region
   project_name      = var.project_name
@@ -108,6 +108,21 @@ output "sie_irsa_role_arn" {
 output "cluster_autoscaler_irsa_role_arn" {
   description = "Cluster autoscaler IRSA role ARN — pass to helm install"
   value       = module.sie_eks.cluster_autoscaler_irsa_role_arn
+}
+
+output "ecr_server_repository_url" {
+  description = "ECR repository URL for sie-server images"
+  value       = module.sie_eks.ecr_server_repository_url
+}
+
+output "ecr_gateway_repository_url" {
+  description = "ECR repository URL for sie-gateway images"
+  value       = module.sie_eks.ecr_gateway_repository_url
+}
+
+output "ecr_config_repository_url" {
+  description = "ECR repository URL for sie-config images"
+  value       = module.sie_eks.ecr_config_repository_url
 }
 
 output "workload_identity_annotation" {

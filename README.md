@@ -9,7 +9,7 @@ One command to get a GPU-ready EKS cluster for [SIE](https://github.com/superlin
 - **Scale-to-zero** — GPU nodes scale down to zero when idle, so you only pay when running inference
 - **Cluster Autoscaler** — automatically scales node groups based on pending pod demand
 - **NVIDIA device plugin** — pre-installed so GPU pods schedule immediately
-- **ECR repositories** (opt-in) — private container registries, project-scoped names (`<project_name>/sie-server`, …). Off by default; set `create_ecr_repositories = true` to opt in.
+- **ECR repositories** (opt-in) — private container registries for customer-built images (`<project_name>/sie-server`, `<project_name>/sie-gateway`, `<project_name>/sie-config`). Off by default; set `create_ecr_repositories = true` to opt in. The worker-sidecar image stays on the chart's public GHCR default.
 - **IRSA** (IAM Roles for Service Accounts) — pods authenticate to AWS without stored credentials
 - **VPC endpoints** — private connectivity to ECR, S3, STS, and other AWS services
 - **EBS CSI driver** — persistent volumes work out of the box
@@ -31,7 +31,7 @@ That's it. After apply, configure kubectl and deploy SIE via Helm:
 $(terraform output -raw kubectl_config_command)
 
 # Deploy SIE (gateway, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.4.1 \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.4.2 \
   -f values-aws.yaml \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)"
@@ -169,7 +169,7 @@ After `terraform apply`, use these outputs to connect and deploy:
 ```
 
 ## Pushing images to ECR
-> This is optional, because the official image is available at `ghcr.io/superlinked/`.
+> This is optional, because the official images are available under `ghcr.io/superlinked/`.
 
 Requires `create_ecr_repositories = true` (or repos managed by another stack — see `ecr_repository_prefix`).
 
@@ -235,8 +235,8 @@ This module follows AWS security best practices out of the box:
 
 Some pieces of a production deployment are intentionally not turnkey — either because they're cluster-wide / cross-stack concerns (registry, OIDC) or because they require domains and DNS records that only you can own (TLS, DNS). This module lets you opt out where it makes sense and points at the right knobs.
 
-- **Container registry** — optional. The module does **not** create ECR repos by default (`create_ecr_repositories = false`, see [`infra/variables.tf`](infra/variables.tf)) — this matches the chart's GHCR-by-default behaviour and avoids `RepositoryAlreadyExistsException` on accounts where repos already exist. Set `create_ecr_repositories = true` to opt in to terraform-managed ECR; the module will create project-scoped repos (`<project_name>/sie-server`, `<project_name>/sie-gateway`, `<project_name>/sie-config`). Override the namespace via `ecr_repository_prefix` — set to `""` to disable prefixing for accounts where ECR is externally managed under bare names. The module always emits `ecr_*_repository_url` outputs (composed from caller identity + repo names) so IRSA / Helm wiring is unchanged whether you opt in or not. To use any external registry, point the Helm chart at it via `gateway.image.repository`, `workers.common.image.repository`, and `config.image.repository`.
-- **TLS certificate** — BYO by default. Set `ingress.tls.mode` to one of:
+- **Container registry** — optional. The module does **not** create ECR repos by default (`create_ecr_repositories = false`, see [`infra/variables.tf`](infra/variables.tf)) — this matches the chart's GHCR-by-default behaviour and avoids `RepositoryAlreadyExistsException` on accounts where repos already exist. Set `create_ecr_repositories = true` to opt in to terraform-managed ECR; the module will create project-scoped repos (`<project_name>/sie-server`, `<project_name>/sie-gateway`, `<project_name>/sie-config`). Override the namespace via `ecr_repository_prefix` — set to `""` to disable prefixing for accounts where ECR is externally managed under bare names. The module always emits `ecr_*_repository_url` outputs (composed from caller identity + repo names) so IRSA / Helm wiring is unchanged whether you opt in or not. The worker-sidecar uses the chart's `ghcr.io/superlinked/sie-server-sidecar` default; to use an external registry for the other runtime images, point the Helm chart at it via `gateway.image.repository`, `workers.common.image.repository`, and `config.image.repository`.
+- **TLS certificate** — BYO by default. Set `ingress.tlsConfig.mode` to one of:
   - `byo` — supply your own `kubernetes.io/tls` Secret.
   - `cert-manager` — install cert-manager once in the cluster; the chart annotates the Ingress for automated Let's Encrypt issuance via HTTP-01.
   - `self-signed` — for air-gapped clusters; set `certManagerBundle.certManager.install: true` to bundle cert-manager (single-tenant clusters only).
