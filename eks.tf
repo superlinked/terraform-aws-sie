@@ -190,13 +190,15 @@ module "eks" {
         capacity_type  = g.capacity_type
         subnet_ids     = local.gpu_group_subnets[g.name]
 
-        # 100GB root volume — large CUDA images need >20GB default
+        # GPU root volume. Large CUDA/SGLang images plus model caches need
+        # substantially more than the EKS default, and size is configurable per
+        # node group for parity with the GCP Terraform module.
         block_device_mappings = {
           xvda = {
             device_name = "/dev/xvda"
             ebs = {
-              volume_size           = 100
-              volume_type           = "gp3"
+              volume_size           = g.disk_size_gb
+              volume_type           = g.disk_type
               delete_on_termination = true
             }
           }

@@ -64,6 +64,7 @@ run "validate_gpu_node_group_spot" {
     gpu_capacity_type = "SPOT"
     gpu_min_size      = 0
     gpu_max_size      = 5
+    gpu_disk_size_gb  = 250
   }
 
   # GPU node group should be wired from the plan-known GPU config.
@@ -74,9 +75,53 @@ run "validate_gpu_node_group_spot" {
       && try(local.effective_gpu_groups[0].capacity_type, null) == "SPOT"
       && try(local.effective_gpu_groups[0].min_size, null) == 0
       && try(local.effective_gpu_groups[0].max_size, null) == 5
+      && try(local.effective_gpu_groups[0].disk_size_gb, null) == 250
     )
 
-    error_message = "GPU node group should be planned with the requested instance type, capacity type, and scaling bounds"
+    error_message = "GPU node group should be planned with the requested instance type, capacity type, scaling bounds, and disk size"
+  }
+}
+
+run "validate_multi_gpu_node_group_disk_sizes" {
+  command = plan
+
+  variables {
+    project_name = "sie-test"
+    gpu_node_groups = [
+      {
+        name          = "l4"
+        instance_type = "g6.xlarge"
+        capacity_type = "SPOT"
+        min_size      = 0
+        max_size      = 5
+        disk_size_gb  = 100
+        disk_type     = "gp3"
+      },
+      {
+        name          = "l4-large-cache"
+        instance_type = "g6.xlarge"
+        capacity_type = "ON_DEMAND"
+        min_size      = 1
+        max_size      = 3
+        disk_size_gb  = 300
+        disk_type     = "gp3"
+      },
+    ]
+  }
+
+  assert {
+    condition = (
+      contains(keys(module.eks.eks_managed_node_groups), "l4")
+      && contains(keys(module.eks.eks_managed_node_groups), "l4-large-cache")
+      && try({ for g in local.effective_gpu_groups : g.name => g }["l4"].disk_size_gb, null) == 100
+      && try({ for g in local.effective_gpu_groups : g.name => g }["l4"].disk_type, null) == "gp3"
+      && try({ for g in local.effective_gpu_groups : g.name => g }["l4-large-cache"].disk_size_gb, null) == 300
+      && try({ for g in local.effective_gpu_groups : g.name => g }["l4-large-cache"].disk_type, null) == "gp3"
+      && try(output.gpu_node_group_disk_sizes_gb["l4"], null) == 100
+      && try(output.gpu_node_group_disk_sizes_gb["l4-large-cache"], null) == 300
+    )
+
+    error_message = "Multi-pool GPU node groups should preserve per-pool disk size/type and expose disk-size output"
   }
 }
 

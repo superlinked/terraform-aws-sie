@@ -22,6 +22,8 @@ locals {
     capacity_type = var.gpu_capacity_type
     min_size      = var.gpu_min_size
     max_size      = var.gpu_max_size
+    disk_size_gb  = var.gpu_disk_size_gb
+    disk_type     = var.gpu_disk_type
     labels        = {}
   }]
 

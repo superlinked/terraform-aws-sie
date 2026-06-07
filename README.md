@@ -31,7 +31,7 @@ That's it. After apply, configure kubectl and deploy SIE via Helm:
 $(terraform output -raw kubectl_config_command)
 
 # Deploy SIE (gateway, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.6.0 \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.6.1 \
   -f values-aws.yaml \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)"
@@ -68,6 +68,13 @@ No variables are strictly required — all have sensible defaults. Override thes
 | `gpu_capacity_type` | `ON_DEMAND` | `ON_DEMAND` or `SPOT` (spot saves ~60-70%) |
 | `gpu_min_size` | `1` | Minimum GPU nodes — set to `0` for scale-to-zero |
 | `gpu_max_size` | `10` | Maximum GPU nodes |
+| `gpu_disk_size_gb` | `100` | Root EBS volume size for the legacy single GPU node group |
+| `gpu_disk_type` | `gp3` | Root EBS volume type for the legacy single GPU node group |
+
+For multi-pool clusters, set `gpu_node_groups[*].disk_size_gb` and
+`gpu_node_groups[*].disk_type` per pool. This mirrors the GCP module's
+`gpu_node_pools[*].disk_size_gb` / `disk_type` shape and is the knob that
+backs Kubernetes `emptyDir` model caches on EKS nodes.
 
 ### Networking
 
@@ -128,6 +135,7 @@ After `terraform apply`, use these outputs to connect and deploy:
 | `cluster_autoscaler_irsa_role_arn` | Cluster autoscaler IAM role |
 | `gpu_instance_type` | Confirm which GPU type is deployed |
 | `gpu_capacity_type` | Confirm ON_DEMAND vs SPOT |
+| `gpu_node_group_disk_sizes_gb` | Root EBS volume size per effective GPU node group |
 
 ## Architecture
 

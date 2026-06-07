@@ -136,6 +136,28 @@ variable "gpu_max_size" {
   default     = 10
 }
 
+variable "gpu_disk_size_gb" {
+  description = "Root EBS volume size in GiB for the legacy single GPU node group. Use gpu_node_groups[*].disk_size_gb for multi-pool clusters."
+  type        = number
+  default     = 100
+
+  validation {
+    condition     = floor(var.gpu_disk_size_gb) == var.gpu_disk_size_gb && var.gpu_disk_size_gb >= 20
+    error_message = "gpu_disk_size_gb must be an integer at least 20."
+  }
+}
+
+variable "gpu_disk_type" {
+  description = "Root EBS volume type for the legacy single GPU node group. Use gpu_node_groups[*].disk_type for multi-pool clusters."
+  type        = string
+  default     = "gp3"
+
+  validation {
+    condition     = contains(["standard", "gp2", "gp3", "io1", "io2", "st1", "sc1"], var.gpu_disk_type)
+    error_message = "gpu_disk_type must be a valid EBS volume type."
+  }
+}
+
 # --- Multi-GPU variable (new) -----------------------------------------------
 # When set, overrides the legacy single-GPU variables above.
 
@@ -147,6 +169,8 @@ variable "gpu_node_groups" {
     capacity_type = optional(string, "SPOT") # Note: legacy gpu_capacity_type defaults to ON_DEMAND
     min_size      = optional(number, 0)
     max_size      = optional(number, 10)
+    disk_size_gb  = optional(number, 100)
+    disk_type     = optional(string, "gp3")
     labels        = optional(map(string), {})
   }))
   default = []
@@ -156,6 +180,20 @@ variable "gpu_node_groups" {
       for g in var.gpu_node_groups : contains(["ON_DEMAND", "SPOT"], g.capacity_type)
     ])
     error_message = "Each gpu_node_groups[*].capacity_type must be ON_DEMAND or SPOT"
+  }
+
+  validation {
+    condition = alltrue([
+      for g in var.gpu_node_groups : floor(g.disk_size_gb) == g.disk_size_gb && g.disk_size_gb >= 20
+    ])
+    error_message = "Each gpu_node_groups[*].disk_size_gb must be an integer at least 20."
+  }
+
+  validation {
+    condition = alltrue([
+      for g in var.gpu_node_groups : contains(["standard", "gp2", "gp3", "io1", "io2", "st1", "sc1"], g.disk_type)
+    ])
+    error_message = "Each gpu_node_groups[*].disk_type must be a valid EBS volume type."
   }
 
   validation {

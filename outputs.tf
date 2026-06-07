@@ -39,6 +39,11 @@ output "gpu_capacity_type" {
   value       = var.gpu_capacity_type
 }
 
+output "gpu_node_group_disk_sizes_gb" {
+  description = "Root EBS volume size in GiB for each effective GPU node group."
+  value       = { for g in local.effective_gpu_groups : g.name => g.disk_size_gb }
+}
+
 # =============================================================================
 # Container Registry
 # =============================================================================
