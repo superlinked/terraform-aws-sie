@@ -1,18 +1,18 @@
 # SIE EKS Terraform Module
 
-One command to get a GPU-ready EKS cluster for [SIE](https://github.com/superlinked/sie) (Search Inference Engine). The module creates everything you need — VPC, EKS, GPU nodes, container registry, autoscaling — so you can focus on running inference, not managing infrastructure.
+One command to get a GPU-ready EKS cluster for [SIE](https://github.com/superlinked/sie) (Search Inference Engine). The module creates everything you need - VPC, EKS, GPU nodes, container registry, autoscaling - so you can focus on running inference, not managing infrastructure.
 
 ## What you get
 
 - **EKS cluster** (Kubernetes 1.35) with private networking and KMS-encrypted secrets
-- **GPU node group** — pick your GPU: g6 (L4), g5 (A10G), p4d (A100), or p5 (H100)
-- **Scale-to-zero** — GPU nodes scale down to zero when idle, so you only pay when running inference
-- **Cluster Autoscaler** — automatically scales node groups based on pending pod demand
-- **NVIDIA device plugin** — pre-installed so GPU pods schedule immediately
-- **ECR repositories** (opt-in) — private container registries for customer-built images (`<project_name>/sie-server`, `<project_name>/sie-gateway`, `<project_name>/sie-config`). Off by default; set `create_ecr_repositories = true` to opt in. The worker-sidecar image stays on the chart's public GHCR default.
-- **IRSA** (IAM Roles for Service Accounts) — pods authenticate to AWS without stored credentials
-- **VPC endpoints** — private connectivity to ECR, S3, STS, and other AWS services
-- **EBS CSI driver** — persistent volumes work out of the box
+- **GPU node group** - pick your GPU: g6 (L4), g5 (A10G), p4d (A100), or p5 (H100)
+- **Scale-to-zero** - GPU nodes scale down to zero when idle, so you only pay when running inference
+- **Cluster Autoscaler** - automatically scales node groups based on pending pod demand
+- **NVIDIA device plugin** - pre-installed so GPU pods schedule immediately
+- **ECR repositories** (opt-in) - private container registries for customer-built images (`<project_name>/sie-server`, `<project_name>/sie-gateway`, `<project_name>/sie-config`). Off by default; set `create_ecr_repositories = true` to opt in. The worker-sidecar image stays on the chart's public GHCR default.
+- **IRSA** (IAM Roles for Service Accounts) - pods authenticate to AWS without stored credentials
+- **VPC endpoints** - private connectivity to ECR, S3, STS, and other AWS services
+- **EBS CSI driver** - persistent volumes work out of the box
 
 ## Quick start
 
@@ -31,7 +31,7 @@ That's it. After apply, configure kubectl and deploy SIE via Helm:
 $(terraform output -raw kubectl_config_command)
 
 # Deploy SIE (gateway, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.6.4 \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.6.5 \
   -f values-aws.yaml \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)"
@@ -46,14 +46,14 @@ helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster 
 ## Prerequisites
 
 1. **AWS credentials** configured (`aws configure`, environment variables, or IAM role)
-2. **GPU quota** in your target region — check EC2 limits for your chosen instance type
+2. **GPU quota** in your target region - check EC2 limits for your chosen instance type
 3. **Terraform** >= 1.14
 
 ## Variables
 
 ### Required
 
-No variables are strictly required — all have sensible defaults. Override these for your environment:
+No variables are strictly required - all have sensible defaults. Override these for your environment:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -66,7 +66,7 @@ No variables are strictly required — all have sensible defaults. Override thes
 |----------|---------|-------------|
 | `gpu_instance_type` | `g6.xlarge` | EC2 instance type for GPU nodes |
 | `gpu_capacity_type` | `ON_DEMAND` | `ON_DEMAND` or `SPOT` (spot saves ~60-70%) |
-| `gpu_min_size` | `1` | Minimum GPU nodes — set to `0` for scale-to-zero |
+| `gpu_min_size` | `1` | Minimum GPU nodes - set to `0` for scale-to-zero |
 | `gpu_max_size` | `10` | Maximum GPU nodes |
 | `gpu_disk_size_gb` | `100` | Root EBS volume size for the legacy single GPU node group |
 | `gpu_disk_type` | `gp3` | Root EBS volume type for the legacy single GPU node group |
@@ -110,7 +110,7 @@ Changing VPC/subnet sizing is intentionally breaking for existing clusters becau
 | `gateway_ecr_repository_name` | `sie-gateway` | ECR repo name for the request gateway |
 | `config_ecr_repository_name` | `sie-config` | ECR repo name for the sie-config control plane image |
 | `create_ecr_repositories` | `false` | Whether this module manages the ECR repos. Default `false` matches the chart's GHCR-by-default behaviour and avoids `RepositoryAlreadyExistsException` on accounts where the repos already exist. Set `true` to opt in. The `ecr_*_repository_url` outputs are emitted regardless. |
-| `ecr_repository_prefix` | `null` → `<project_name>` | Namespace prefix for ECR repo names; final names become `<prefix>/<repo_name>`. Set to `""` to disable prefixing (bare names) for accounts where ECR is externally managed. |
+| `ecr_repository_prefix` | `null` -> `<project_name>` | Namespace prefix for ECR repo names; final names become `<prefix>/<repo_name>`. Set to `""` to disable prefixing (bare names) for accounts where ECR is externally managed. |
 
 ### Workload identity
 
@@ -179,7 +179,7 @@ After `terraform apply`, use these outputs to connect and deploy:
 ## Pushing images to ECR
 > This is optional, because the official images are available under `ghcr.io/superlinked/`.
 
-Requires `create_ecr_repositories = true` (or repos managed by another stack — see `ecr_repository_prefix`).
+Requires `create_ecr_repositories = true` (or repos managed by another stack - see `ecr_repository_prefix`).
 
 After `terraform apply`, push your SIE Docker images:
 
@@ -230,28 +230,28 @@ See `infra/s3_model_cache.tf` and `infra/irsa.tf` for the resource definitions.
 
 This module follows AWS security best practices out of the box:
 
-- **KMS encryption** — EKS secrets encrypted at rest with a dedicated, auto-rotating KMS key
-- **Private subnets** — worker nodes run in private subnets with no public IPs
-- **NAT gateway** — outbound internet via NAT (one per AZ for high availability)
-- **VPC endpoints** — private access to ECR, S3, STS, EC2, CloudWatch, and other services
-- **IRSA** — pods use IAM roles instead of long-lived credentials
-- **GPU taints** — GPU nodes are tainted so only GPU workloads schedule on them
-- **Image scanning** — ECR scans images on push for known vulnerabilities
-- **Audit logging** — all EKS control plane log types enabled
+- **KMS encryption** - EKS secrets encrypted at rest with a dedicated, auto-rotating KMS key
+- **Private subnets** - worker nodes run in private subnets with no public IPs
+- **NAT gateway** - outbound internet via NAT (one per AZ for high availability)
+- **VPC endpoints** - private access to ECR, S3, STS, EC2, CloudWatch, and other services
+- **IRSA** - pods use IAM roles instead of long-lived credentials
+- **GPU taints** - GPU nodes are tainted so only GPU workloads schedule on them
+- **Image scanning** - ECR scans images on push for known vulnerabilities
+- **Audit logging** - all EKS control plane log types enabled
 
 ## Bring-your-own components
 
-Some pieces of a production deployment are intentionally not turnkey — either because they're cluster-wide / cross-stack concerns (registry, OIDC) or because they require domains and DNS records that only you can own (TLS, DNS). This module lets you opt out where it makes sense and points at the right knobs.
+Some pieces of a production deployment are intentionally not turnkey - either because they're cluster-wide / cross-stack concerns (registry, OIDC) or because they require domains and DNS records that only you can own (TLS, DNS). This module lets you opt out where it makes sense and points at the right knobs.
 
-- **Container registry** — optional. The module does **not** create ECR repos by default (`create_ecr_repositories = false`, see [`infra/variables.tf`](infra/variables.tf)) — this matches the chart's GHCR-by-default behaviour and avoids `RepositoryAlreadyExistsException` on accounts where repos already exist. Set `create_ecr_repositories = true` to opt in to terraform-managed ECR; the module will create project-scoped repos (`<project_name>/sie-server`, `<project_name>/sie-gateway`, `<project_name>/sie-config`). Override the namespace via `ecr_repository_prefix` — set to `""` to disable prefixing for accounts where ECR is externally managed under bare names. The module always emits `ecr_*_repository_url` outputs (composed from caller identity + repo names) so IRSA / Helm wiring is unchanged whether you opt in or not. The worker-sidecar uses the chart's `ghcr.io/superlinked/sie-server-sidecar` default; to use an external registry for the other runtime images, point the Helm chart at it via `gateway.image.repository`, `workers.common.image.repository`, and `config.image.repository`.
-- **TLS certificate** — BYO by default. Set `ingress.tlsConfig.mode` to one of:
-  - `byo` — supply your own `kubernetes.io/tls` Secret.
-  - `cert-manager` — install cert-manager once in the cluster; the chart annotates the Ingress for automated Let's Encrypt issuance via HTTP-01.
-  - `self-signed` — for air-gapped clusters; set `certManagerBundle.certManager.install: true` to bundle cert-manager (single-tenant clusters only).
+- **Container registry** - optional. The module does **not** create ECR repos by default (`create_ecr_repositories = false`, see [`infra/variables.tf`](infra/variables.tf)) - this matches the chart's GHCR-by-default behaviour and avoids `RepositoryAlreadyExistsException` on accounts where repos already exist. Set `create_ecr_repositories = true` to opt in to terraform-managed ECR; the module will create project-scoped repos (`<project_name>/sie-server`, `<project_name>/sie-gateway`, `<project_name>/sie-config`). Override the namespace via `ecr_repository_prefix` - set to `""` to disable prefixing for accounts where ECR is externally managed under bare names. The module always emits `ecr_*_repository_url` outputs (composed from caller identity + repo names) so IRSA / Helm wiring is unchanged whether you opt in or not. The worker-sidecar uses the chart's `ghcr.io/superlinked/sie-server-sidecar` default; to use an external registry for the other runtime images, point the Helm chart at it via `gateway.image.repository`, `workers.common.image.repository`, and `config.image.repository`.
+- **TLS certificate** - BYO by default. Set `ingress.tlsConfig.mode` to one of:
+  - `byo` - supply your own `kubernetes.io/tls` Secret.
+  - `cert-manager` - install cert-manager once in the cluster; the chart annotates the Ingress for automated Let's Encrypt issuance via HTTP-01.
+  - `self-signed` - for air-gapped clusters; set `certManagerBundle.certManager.install: true` to bundle cert-manager (single-tenant clusters only).
 
   See the [chart README's TLS / HTTPS section](../../helm/sie-cluster/README.md#tls--https). DNS-01 / wildcard / ACM paths are out of scope for the chart.
-- **DNS / domain** — always BYO. This module does not provision Route53 zones or records. After `terraform apply`, take the ingress controller's LoadBalancer hostname (`kubectl -n ingress-nginx get svc ingress-nginx-controller`) and create an A/AAAA record pointing at it under a domain you control.
-- **OIDC provider** — BYO. When `auth.enabled: true` in the chart, set `auth.oauth2Proxy.oidcIssuerUrl` and the corresponding client ID / secret to your existing identity provider (Okta, Auth0, Google Workspace, Azure AD, …). The module does not create an IdP.
+- **DNS / domain** - always BYO. This module does not provision Route53 zones or records. After `terraform apply`, take the ingress controller's LoadBalancer hostname (`kubectl -n ingress-nginx get svc ingress-nginx-controller`) and create an A/AAAA record pointing at it under a domain you control.
+- **OIDC provider** - BYO. When `auth.enabled: true` in the chart, set `auth.oauth2Proxy.oidcIssuerUrl` and the corresponding client ID / secret to your existing identity provider (Okta, Auth0, Google Workspace, Azure AD, ...). The module does not create an IdP.
 
 ## Cleanup
 

@@ -1,6 +1,6 @@
 # Development Cluster with G6 Spot GPUs
 
-Creates a minimal EKS cluster with a single g6.2xlarge spot GPU node group (NVIDIA L4) — ideal for development and testing SIE (Search Inference Engine) workloads at low cost.
+Creates a minimal EKS cluster with a single g6.2xlarge spot GPU node group (NVIDIA L4) - ideal for development and testing SIE (Search Inference Engine) workloads at low cost.
 
 ## What this example creates
 
@@ -32,7 +32,7 @@ After apply, deploy SIE via Helm:
 $(terraform output -raw kubectl_config_command)
 
 # Install SIE (gateway, sie-config, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.6.4 \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.6.5 \
   --namespace sie --create-namespace \
   -f values-aws.yaml \
   --create-namespace -n sie \
