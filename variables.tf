@@ -234,9 +234,9 @@ variable "kubelet_container_log_max_files" {
 # =============================================================================
 
 variable "create_model_cache" {
-  description = "Whether to create the S3 bucket used as the cluster model cache (clusterCache.url in the Helm chart). Default false; flip to true to opt in."
+  description = "Create the S3 bucket backing the optional model-weights cache (models/) and the payload store for work items >1MB (payloads/). The payload store is required for large payloads such as images, so this defaults to true. Set false only if you bring your own object-storage bucket (and wire payloadStore.url) or accept that >1MB requests fail."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "model_cache_bucket_name" {

@@ -8,7 +8,7 @@
 #   # Populate the model cache bucket (only if create_model_cache=true):
 #   sie-admin cache populate --bundle default \
 #     --target $(terraform output -raw model_cache_bucket_url)/
-#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.6.9 \
+#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.6.10 \
 #     --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=$(terraform output -raw sie_irsa_role_arn) \
 #     $(terraform output -raw model_cache_helm_args)
 #   # No extra --set is required for the payload store: the chart auto-derives
@@ -66,7 +66,7 @@ provider "aws" {
 
 module "sie_eks" {
   source  = "superlinked/sie/aws"
-  version = "0.6.9"
+  version = "0.6.10"
 
   aws_region        = var.aws_region
   project_name      = var.project_name
@@ -136,6 +136,16 @@ output "model_cache_bucket_url" {
 }
 
 output "model_cache_helm_args" {
-  description = "Helm --set arguments to enable the cluster cache"
+  description = "Helm --set arguments to enable the OPTIONAL model-weights cache"
   value       = "--set workers.common.clusterCache.enabled=true --set workers.common.clusterCache.url=${module.sie_eks.model_cache_bucket_url}"
+}
+
+output "payload_store_url" {
+  description = "S3 URL of the payload store (/payloads prefix); pass to Helm as payloadStore.url (required for work items >1MB)"
+  value       = module.sie_eks.payload_store_url
+}
+
+output "payload_store_helm_args" {
+  description = "Helm --set argument to wire the payload store (enabled by default in the chart)"
+  value       = "--set payloadStore.url=${module.sie_eks.payload_store_url}"
 }

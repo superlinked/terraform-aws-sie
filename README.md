@@ -31,7 +31,7 @@ That's it. After apply, configure kubectl and deploy SIE via Helm:
 $(terraform output -raw kubectl_config_command)
 
 # Deploy SIE (gateway, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.6.9 \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.6.10 \
   -f values-aws.yaml \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)"
@@ -208,7 +208,7 @@ SIE clusters benefit from two object-store backed features that share a single S
 - **Model cache**: pre-staged model weights at `s3://<bucket>/models/`, so workers cold-start from object storage rather than re-downloading from Hugging Face on every pod spin-up.
 - **Payload store**: large work-item payloads (images, long documents that exceed the 1 MiB NATS in-band budget) at `s3://<bucket>/payloads/`, written by the gateway and read once by the worker. Garbage-collected by a runtime TTL plus a bucket lifecycle rule.
 
-Set `create_model_cache = true` and the module:
+Because the payload store is required for >1 MiB work items, the shared bucket is created **by default** (`create_model_cache = true`). With it enabled, the module:
 
 1. Provisions a managed S3 bucket with versioning, abort-incomplete-multipart, and a lifecycle rule that deletes objects under the `payloads/` prefix after one day.
 2. Attaches two scoped inline policies to the SIE workload IRSA role: read-only on the cache, and `s3:Get/Put/Delete/AbortMultipartUpload` constrained to the `payloads/*` prefix, with a `ListBucket` prefix condition.
@@ -222,7 +222,7 @@ helm upgrade --install sie-cluster ../../deploy/helm/sie-cluster \
   $(terraform output -raw model_cache_helm_args)
 ```
 
-The chart auto-derives `payloadStore.url` from `workers.common.clusterCache.url`, so a single `--set` for the cache covers both features. Operators who do not opt in (`create_model_cache = false`, default) skip the bucket and IAM additions entirely; the chart treats the absence as "payload store off".
+The chart auto-derives `payloadStore.url` from `workers.common.clusterCache.url`, so a single `--set` for the cache covers both the optional weights cache (`models/`) and the payload store (`payloads/`); the `payload_store_url` output is exposed for visibility and can be wired explicitly via `--set payloadStore.url=...` for the rare override case. On the chart side `payloadStore.enabled` defaults to `true`, decoupled from the optional `workers.common.clusterCache`. Operators who bring their own object-storage bucket can opt out (`create_model_cache = false`) and wire `payloadStore.url` themselves; skipping the payload store entirely means work items larger than 1 MiB (e.g. images) fail.
 
 See `infra/s3_model_cache.tf` and `infra/irsa.tf` for the resource definitions.
 
