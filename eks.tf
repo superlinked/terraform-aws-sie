@@ -72,6 +72,21 @@ locals {
       EOT
     }
   ]
+
+  # Default the observability node group's AMI to the AL2023 family matching the
+  # instance architecture, so a Graviton/ARM `instance_type` never pairs with an
+  # x86_64 AMI (or vice versa). Consumers can still override `ami_type`.
+  observability_ami_type = coalesce(
+    var.observability_node_group.ami_type,
+    try(contains(data.aws_ec2_instance_type.observability[0].supported_architectures, "arm64"), false) ? "AL2023_ARM_64_STANDARD" : "AL2023_x86_64_STANDARD",
+  )
+}
+
+# Resolves the observability instance's architecture (only queried when the group
+# is enabled) so `local.observability_ami_type` can pick a matching AL2023 AMI.
+data "aws_ec2_instance_type" "observability" {
+  count         = var.observability_node_group.enabled ? 1 : 0
+  instance_type = var.observability_node_group.instance_type
 }
 
 # EKS Cluster
@@ -250,7 +265,76 @@ module "eks" {
           delete = "90m"
         }
       }
-    }
+    },
+    var.observability_node_group.enabled ? {
+      observability = {
+        min_size = var.observability_node_group.min_size
+        max_size = var.observability_node_group.max_size
+        # Seed desired from min so create-time validation passes; the cluster
+        # autoscaler manages desired_size after creation via ignore_changes.
+        desired_size   = max(var.observability_node_group.min_size, 1)
+        instance_types = [var.observability_node_group.instance_type]
+        ami_type       = local.observability_ami_type
+
+        # Single subnet => single-AZ ASG, so the AZ-locked observability EBS
+        # volumes (Prometheus/Loki/Grafana) always have a node to bind to. A
+        # multi-AZ group can leave their AZ nodeless after a roll and orphan the
+        # pods. Steer obs pods here with a nodeSelector on
+        # `sie.superlinked.com/node-type=observability` (see Helm values).
+        subnet_ids = [
+          local.az_to_private_subnet[coalesce(var.observability_node_group.availability_zone, local.vpc_azs[0])]
+        ]
+
+        block_device_mappings = {
+          xvda = {
+            device_name = "/dev/xvda"
+            ebs = {
+              volume_size           = var.observability_node_group.disk_size_gb
+              volume_type           = var.observability_node_group.disk_type
+              delete_on_termination = true
+            }
+          }
+        }
+
+        cloudinit_pre_nodeadm = local.kubelet_log_retention_node_config
+
+        labels = {
+          "managed-by"                    = "terraform"
+          "sie.superlinked.com/node-type" = "observability"
+        }
+
+        # Dedicate this node group to observability so nothing else consumes the
+        # reserved capacity (Prometheus needs its burst headroom). The critical
+        # DaemonSets (aws-node, kube-proxy, ebs-csi-node, node-exporter, alloy)
+        # all tolerate NoSchedule via operator:Exists, so volumes still mount and
+        # the node stays monitored; obs pods carry a matching toleration (see
+        # values-tester-cluster.yaml).
+        taints = {
+          dedicated = {
+            key    = "sie.superlinked.com/node-type"
+            value  = "observability"
+            effect = "NO_SCHEDULE"
+          }
+        }
+
+        iam_role_additional_policies = {
+          AmazonSSMManagedInstanceCore = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+        }
+
+        tags = {
+          "k8s.io/cluster-autoscaler/enabled"                                           = "true"
+          "k8s.io/cluster-autoscaler/${var.project_name}"                               = "owned"
+          "k8s.io/cluster-autoscaler/node-template/label/sie.superlinked.com/node-type" = "observability"
+          "k8s.io/cluster-autoscaler/node-template/taint/sie.superlinked.com/node-type" = "observability:NoSchedule"
+        }
+
+        timeouts = {
+          create = "90m"
+          update = "90m"
+          delete = "90m"
+        }
+      }
+    } : {}
   )
 }
 

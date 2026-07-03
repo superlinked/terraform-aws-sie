@@ -207,6 +207,39 @@ variable "gpu_node_groups" {
   }
 }
 
+variable "observability_node_group" {
+  description = <<-EOT
+    Optional dedicated single-AZ node group for the stateful observability stack
+    (Prometheus/Loki/Grafana/Alertmanager). Their EBS volumes are AZ-locked, and
+    a multi-AZ node group can leave the volumes' AZ without a node after a roll or
+    scale, orphaning the pods (Pending, PersistentVolume node-affinity conflict).
+    Pinning a node group to one AZ with min_size >= 1 guarantees a home. Disabled
+    by default so other clusters are unaffected. Steer obs pods onto it with a
+    nodeSelector on `sie.superlinked.com/node-type=observability` in Helm values.
+  EOT
+  type = object({
+    enabled           = optional(bool, false)
+    availability_zone = optional(string, null) # e.g. "us-east-2c"; defaults to the first VPC AZ
+    instance_type     = optional(string, "t3.xlarge")
+    ami_type          = optional(string, null) # default: the AL2023 family matching the instance architecture (x86_64 or arm64); set explicitly for e.g. Bottlerocket
+    min_size          = optional(number, 1)
+    max_size          = optional(number, 2)
+    disk_size_gb      = optional(number, 100)
+    disk_type         = optional(string, "gp3")
+  })
+  default = {}
+
+  validation {
+    condition     = !var.observability_node_group.enabled || var.observability_node_group.min_size >= 1
+    error_message = "observability_node_group.min_size must be >= 1 when enabled, so the AZ-locked observability volumes always have a node to bind to."
+  }
+
+  validation {
+    condition     = var.observability_node_group.max_size >= var.observability_node_group.min_size
+    error_message = "observability_node_group.max_size must be >= observability_node_group.min_size."
+  }
+}
+
 variable "kubelet_container_log_max_size" {
   description = "Maximum size of a single kubelet-managed container log file before rotation. Kubelet rotates by size/files, not wall-clock retention."
   type        = string
