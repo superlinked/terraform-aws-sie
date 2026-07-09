@@ -31,7 +31,7 @@ That's it. After apply, configure kubectl and deploy SIE via Helm:
 $(terraform output -raw kubectl_config_command)
 
 # Deploy SIE (gateway, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.6.16 \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.6.17 \
   -f values-aws.yaml \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)"
@@ -75,6 +75,11 @@ For multi-pool clusters, set `gpu_node_groups[*].disk_size_gb` and
 `gpu_node_groups[*].disk_type` per pool. This mirrors the GCP module's
 `gpu_node_pools[*].disk_size_gb` / `disk_type` shape and is the knob that
 backs Kubernetes `emptyDir` model caches on EKS nodes.
+
+`gpu_node_groups` configures node groups, not Helm worker pod GPU count. For a
+multi-GPU worker pod, choose an instance type with enough GPUs, then set the
+matching Helm `workers.pools.<name>.gpu.count` to the number of GPUs the pod
+should consume on one node.
 
 ### Networking
 

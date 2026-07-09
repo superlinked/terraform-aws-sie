@@ -158,11 +158,11 @@ variable "gpu_disk_type" {
   }
 }
 
-# --- Multi-GPU variable (new) -----------------------------------------------
+# --- Multiple GPU node groups -----------------------------------------------
 # When set, overrides the legacy single-GPU variables above.
 
 variable "gpu_node_groups" {
-  description = "List of GPU node group configurations. When non-empty, overrides legacy gpu_* variables."
+  description = "List of GPU node group configurations. When non-empty, overrides legacy gpu_* variables. This controls node group shape; per-pod multi-GPU scheduling still requires selecting an instance type with enough GPUs and matching Helm workers.pools.<name>.gpu.count."
   type = list(object({
     name          = string
     instance_type = string
