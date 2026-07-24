@@ -165,3 +165,8 @@ output "sie_irsa_role_arn" {
   description = "ARN of the IAM role for SIE workloads (use in Helm values)"
   value       = module.sie_irsa_role.arn
 }
+
+output "oidc_provider_arn" {
+  description = "ARN of the cluster's IAM OIDC provider. Consumer configurations use it to build IRSA trust policies for their own service accounts."
+  value       = module.eks.oidc_provider_arn
+}
