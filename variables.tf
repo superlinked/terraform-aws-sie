@@ -137,9 +137,9 @@ variable "gpu_max_size" {
 }
 
 variable "gpu_disk_size_gb" {
-  description = "Root EBS volume size in GiB for the legacy single GPU node group. Use gpu_node_groups[*].disk_size_gb for multi-pool clusters."
+  description = "Root EBS volume size in GiB for the legacy single GPU node group. Must stay above the Helm chart's `workers.common.cacheStorageSize` (default 300Gi): that model cache is an emptyDir on this root volume, so a smaller disk fills up and kubelet evicts workers on disk pressure long before the emptyDir sizeLimit engages. The 500 default sizes for kubelet's eviction threshold, not just raw capacity: at the default `nodefs.available<10%` only ~90% of the disk is usable, so holding the 300Gi cache plus ~100GiB of OS, container images, and logs needs ceil(400 / 0.9) = 445GiB, and 500 leaves room for filesystem overhead. Use gpu_node_groups[*].disk_size_gb for multi-pool clusters."
   type        = number
-  default     = 100
+  default     = 500
 
   validation {
     condition     = floor(var.gpu_disk_size_gb) == var.gpu_disk_size_gb && var.gpu_disk_size_gb >= 20
@@ -162,14 +162,14 @@ variable "gpu_disk_type" {
 # When set, overrides the legacy single-GPU variables above.
 
 variable "gpu_node_groups" {
-  description = "List of GPU node group configurations. When non-empty, overrides legacy gpu_* variables. This controls node group shape; per-pod multi-GPU scheduling still requires selecting an instance type with enough GPUs and matching Helm workers.pools.<name>.gpu.count."
+  description = "List of GPU node group configurations. When non-empty, overrides legacy gpu_* variables. This controls node group shape; per-pod multi-GPU scheduling still requires selecting an instance type with enough GPUs and matching Helm workers.pools.<name>.gpu.count. Keep disk_size_gb above the Helm chart's `workers.common.cacheStorageSize` (default 300Gi) for every group that hosts workers — see gpu_disk_size_gb."
   type = list(object({
     name          = string
     instance_type = string
     capacity_type = optional(string, "SPOT") # Note: legacy gpu_capacity_type defaults to ON_DEMAND
     min_size      = optional(number, 0)
     max_size      = optional(number, 10)
-    disk_size_gb  = optional(number, 100)
+    disk_size_gb  = optional(number, 500) # (300Gi cache + ~100GiB OS/images/logs) / 0.9 kubelet eviction headroom
     disk_type     = optional(string, "gp3")
     labels        = optional(map(string), {})
   }))

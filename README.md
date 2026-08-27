@@ -31,7 +31,7 @@ That's it. After apply, configure kubectl and deploy SIE via Helm:
 $(terraform output -raw kubectl_config_command)
 
 # Deploy SIE (gateway, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.7.1 \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.7.2 \
   -f values-aws.yaml \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)"
@@ -68,13 +68,26 @@ No variables are strictly required - all have sensible defaults. Override these 
 | `gpu_capacity_type` | `ON_DEMAND` | `ON_DEMAND` or `SPOT` (spot saves ~60-70%) |
 | `gpu_min_size` | `1` | Minimum GPU nodes - set to `0` for scale-to-zero |
 | `gpu_max_size` | `10` | Maximum GPU nodes |
-| `gpu_disk_size_gb` | `100` | Root EBS volume size for the legacy single GPU node group |
+| `gpu_disk_size_gb` | `500` | Root EBS volume size for the legacy single GPU node group |
 | `gpu_disk_type` | `gp3` | Root EBS volume type for the legacy single GPU node group |
 
 For multi-pool clusters, set `gpu_node_groups[*].disk_size_gb` and
 `gpu_node_groups[*].disk_type` per pool. This mirrors the GCP module's
 `gpu_node_pools[*].disk_size_gb` / `disk_type` shape and is the knob that
 backs Kubernetes `emptyDir` model caches on EKS nodes.
+
+Keep the disk above the Helm chart's `workers.common.cacheStorageSize`
+(default `300Gi`). That cache is an `emptyDir` **on the node root volume**, so
+its `sizeLimit` caps the cache without reserving the space: on a smaller disk a
+worker lazily loading several large models fills the root volume first and
+kubelet evicts it on disk pressure mid-inference, the replacement re-downloads
+the weights, and the cycle repeats.
+
+Size for kubelet's eviction threshold, not just raw capacity. At the default
+`nodefs.available<10%` only ~90% of the disk is usable before eviction starts,
+so the `300Gi` cache plus ~100GiB of OS, container images, and logs needs
+`ceil(400 / 0.9)` = 445GiB. The `500` defaults round that up to leave room for
+filesystem overhead.
 
 `gpu_node_groups` configures node groups, not Helm worker pod GPU count. For a
 multi-GPU worker pod, choose an instance type with enough GPUs, then set the
