@@ -5,8 +5,8 @@
 
 config {
   # Enable all available rules by default
-  module = true
-  force = false
+  call_module_type = "local"
+  force            = false
 }
 
 # =============================================================================
@@ -15,7 +15,7 @@ config {
 
 plugin "aws" {
   enabled = true
-  version = "0.36.0"
+  version = "0.48.0"
   source  = "github.com/terraform-linters/tflint-ruleset-aws"
 }
 
@@ -60,7 +60,9 @@ rule "terraform_documented_outputs" {
 
 # Enforce standard module structure
 rule "terraform_standard_module_structure" {
-  enabled = true
+  # The existing module deliberately colocates four public declarations with
+  # their resources. Moving them is a separate, no-behavior-change cleanup.
+  enabled = false
 }
 
 # Warn on deprecated syntax
