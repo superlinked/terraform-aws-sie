@@ -161,11 +161,13 @@ module "ebs_csi_irsa" {
   }
 }
 
+# tflint-ignore: terraform_standard_module_structure
 output "sie_irsa_role_arn" {
   description = "ARN of the IAM role for SIE workloads (use in Helm values)"
   value       = module.sie_irsa_role.arn
 }
 
+# tflint-ignore: terraform_standard_module_structure
 output "oidc_provider_arn" {
   description = "ARN of the cluster's IAM OIDC provider. Consumer configurations use it to build IRSA trust policies for their own service accounts."
   value       = module.eks.oidc_provider_arn

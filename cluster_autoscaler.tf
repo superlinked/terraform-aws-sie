@@ -4,6 +4,7 @@
 # The autoscaler watches for unschedulable pods and scales node groups up/down.
 # The IRSA role grants the autoscaler permission to modify EC2 Auto Scaling Groups.
 
+# tflint-ignore: terraform_standard_module_structure
 variable "cluster_autoscaler_version" {
   description = "Version of the cluster-autoscaler Helm chart"
   type        = string
@@ -59,6 +60,7 @@ resource "helm_release" "cluster_autoscaler" {
   depends_on = [module.eks]
 }
 
+# tflint-ignore: terraform_standard_module_structure
 output "cluster_autoscaler_irsa_role_arn" {
   description = "ARN of the IAM role for cluster autoscaler"
   value       = module.cluster_autoscaler_irsa.arn

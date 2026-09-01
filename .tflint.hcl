@@ -60,9 +60,7 @@ rule "terraform_documented_outputs" {
 
 # Enforce standard module structure
 rule "terraform_standard_module_structure" {
-  # The existing module deliberately colocates four public declarations with
-  # their resources. Moving them is a separate, no-behavior-change cleanup.
-  enabled = false
+  enabled = true
 }
 
 # Warn on deprecated syntax
