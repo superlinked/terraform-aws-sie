@@ -24,18 +24,25 @@ terraform plan
 terraform apply
 ```
 
-That's it. After apply, configure kubectl and deploy SIE via Helm:
+After apply, configure kubectl and deploy SIE with chart `0.8.2`. Its default
+image tags select the matching `v0.8.2` gateway, config, worker, and sidecar
+images. The AWS values file is pinned to the same release:
 
 ```bash
 # Point kubectl at the new cluster
 $(terraform output -raw kubectl_config_command)
 
 # Deploy SIE (gateway, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.7.2 \
-  -f values-aws.yaml \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.8.2 \
+  -f https://raw.githubusercontent.com/superlinked/sie/v0.8.2/deploy/helm/sie-cluster/values-aws.yaml \
   --create-namespace -n sie \
-  --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)"
+  --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)" \
+  $(terraform output -raw model_cache_helm_args)
 ```
+
+For existing installations with custom model profiles, review the
+[SIE 0.8.0 breaking changes](https://github.com/superlinked/sie/releases/tag/v0.8.0)
+for adapter options and launch arguments before upgrading.
 
 ## Examples
 
@@ -199,24 +206,31 @@ After `terraform apply`, use these outputs to connect and deploy:
 
 Requires `create_ecr_repositories = true` (or repos managed by another stack - see `ecr_repository_prefix`).
 
-After `terraform apply`, push your SIE Docker images:
+After `terraform apply`, mirror the released images into ECR. The AWS values
+file enables the `default` and `sglang` worker images; mirror both when
+overriding `workers.common.image.repository`:
 
 ```bash
 # Authenticate Docker to ECR
 aws ecr get-login-password --region $(terraform output -raw aws_region 2>/dev/null || echo $AWS_REGION) \
   | docker login --username AWS --password-stdin $(terraform output -raw ecr_server_repository_url | cut -d/ -f1)
 
-# Push server image
-docker tag sie-server:latest $(terraform output -raw ecr_server_repository_url):latest
-docker push $(terraform output -raw ecr_server_repository_url):latest
+# Mirror both worker images selected by values-aws.yaml
+for bundle in default sglang; do
+  tag="v0.8.2-cuda12-${bundle}"
+  docker pull --platform linux/amd64 "ghcr.io/superlinked/sie-server:${tag}"
+  docker tag "ghcr.io/superlinked/sie-server:${tag}" "$(terraform output -raw ecr_server_repository_url):${tag}"
+  docker push "$(terraform output -raw ecr_server_repository_url):${tag}"
+done
 
-# Push gateway image
-docker tag sie-gateway:latest $(terraform output -raw ecr_gateway_repository_url):latest
-docker push $(terraform output -raw ecr_gateway_repository_url):latest
+# Mirror gateway and config images without changing their release tags
+docker pull --platform linux/amd64 ghcr.io/superlinked/sie-gateway:v0.8.2
+docker tag ghcr.io/superlinked/sie-gateway:v0.8.2 "$(terraform output -raw ecr_gateway_repository_url):v0.8.2"
+docker push "$(terraform output -raw ecr_gateway_repository_url):v0.8.2"
 
-# Push sie-config image
-docker tag sie-config:latest $(terraform output -raw ecr_config_repository_url):latest
-docker push $(terraform output -raw ecr_config_repository_url):latest
+docker pull --platform linux/amd64 ghcr.io/superlinked/sie-config:v0.8.2
+docker tag ghcr.io/superlinked/sie-config:v0.8.2 "$(terraform output -raw ecr_config_repository_url):v0.8.2"
+docker push "$(terraform output -raw ecr_config_repository_url):v0.8.2"
 ```
 
 ## Model cache and payload store
@@ -235,7 +249,9 @@ Because the payload store is required for >1 MiB work items, the shared bucket i
 After apply, pass the bucket into Helm with one terraform output:
 
 ```bash
-helm upgrade --install sie-cluster ../../deploy/helm/sie-cluster \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.8.2 \
+  -f https://raw.githubusercontent.com/superlinked/sie/v0.8.2/deploy/helm/sie-cluster/values-aws.yaml \
+  --namespace sie --create-namespace \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)" \
   $(terraform output -raw model_cache_helm_args)
 ```

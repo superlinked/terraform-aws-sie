@@ -2,7 +2,7 @@
 #
 # Cloud-level resources + EKS-specific K8s infrastructure (Cluster Autoscaler).
 # User-facing K8s workloads (KEDA, Prometheus, SIE) are deployed separately
-# via: helm upgrade --install sie-cluster deploy/helm/sie-cluster
+# via: helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.8.2
 # See examples/ for complete usage.
 
 provider "kubernetes" {
