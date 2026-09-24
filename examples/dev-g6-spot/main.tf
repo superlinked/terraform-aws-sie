@@ -21,7 +21,8 @@
 # Prerequisites:
 #   1. AWS credentials configured (aws configure or environment variables)
 #   2. EC2 quota for g6.2xlarge in the target region
-#   3. Access to the public SIE images on GHCR (or mirrored versioned images in ECR)
+#   3. Access to public SIE images on GHCR; the sidecar still uses GHCR
+#      when the server, gateway and config images are mirrored to ECR
 #
 # Usage:
 #   cd deploy/terraform/aws/examples/dev-g6-spot
