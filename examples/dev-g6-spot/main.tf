@@ -8,7 +8,9 @@
 #   # Populate the model cache bucket (only if create_model_cache=true):
 #   sie-admin cache populate --bundle default \
 #     --target $(terraform output -raw model_cache_bucket_url)/
-#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.7.2 \
+#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.8.2 \
+#     -f https://raw.githubusercontent.com/superlinked/sie/v0.8.2/deploy/helm/sie-cluster/values-aws.yaml \
+#     --namespace sie --create-namespace \
 #     --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=$(terraform output -raw sie_irsa_role_arn) \
 #     $(terraform output -raw model_cache_helm_args)
 #   # No extra --set is required for the payload store: the chart auto-derives
@@ -19,7 +21,7 @@
 # Prerequisites:
 #   1. AWS credentials configured (aws configure or environment variables)
 #   2. EC2 quota for g6.2xlarge in the target region
-#   3. SIE Docker images pushed to ECR
+#   3. Access to the public SIE images on GHCR (or mirrored versioned images in ECR)
 #
 # Usage:
 #   cd deploy/terraform/aws/examples/dev-g6-spot
