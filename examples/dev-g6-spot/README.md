@@ -32,8 +32,8 @@ After apply, deploy SIE via Helm:
 $(terraform output -raw kubectl_config_command)
 
 # Install SIE (gateway, sie-config, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.8.2 \
-  -f https://raw.githubusercontent.com/superlinked/sie/v0.8.2/deploy/helm/sie-cluster/values-aws.yaml \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.8.3 \
+  -f https://raw.githubusercontent.com/superlinked/sie/v0.8.3/deploy/helm/sie-cluster/values-aws.yaml \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)" \
   $(terraform output -raw model_cache_helm_args)

@@ -24,8 +24,8 @@ terraform plan
 terraform apply
 ```
 
-After apply, configure kubectl and deploy SIE with chart `0.8.2`. Its default
-image tags select the matching `v0.8.2` gateway, config, worker, and sidecar
+After apply, configure kubectl and deploy SIE with chart `0.8.3`. Its default
+image tags select the matching `v0.8.3` gateway, config, worker, and sidecar
 images. The AWS values file is pinned to the same release:
 
 ```bash
@@ -33,8 +33,8 @@ images. The AWS values file is pinned to the same release:
 $(terraform output -raw kubectl_config_command)
 
 # Deploy SIE (gateway, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.8.2 \
-  -f https://raw.githubusercontent.com/superlinked/sie/v0.8.2/deploy/helm/sie-cluster/values-aws.yaml \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.8.3 \
+  -f https://raw.githubusercontent.com/superlinked/sie/v0.8.3/deploy/helm/sie-cluster/values-aws.yaml \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)" \
   $(terraform output -raw model_cache_helm_args)
@@ -217,20 +217,20 @@ aws ecr get-login-password --region $(terraform output -raw aws_region 2>/dev/nu
 
 # Mirror both worker images selected by values-aws.yaml
 for bundle in default sglang; do
-  tag="v0.8.2-cuda12-${bundle}"
+  tag="v0.8.3-cuda12-${bundle}"
   docker pull --platform linux/amd64 "ghcr.io/superlinked/sie-server:${tag}"
   docker tag "ghcr.io/superlinked/sie-server:${tag}" "$(terraform output -raw ecr_server_repository_url):${tag}"
   docker push "$(terraform output -raw ecr_server_repository_url):${tag}"
 done
 
 # Mirror gateway and config images without changing their release tags
-docker pull --platform linux/amd64 ghcr.io/superlinked/sie-gateway:v0.8.2
-docker tag ghcr.io/superlinked/sie-gateway:v0.8.2 "$(terraform output -raw ecr_gateway_repository_url):v0.8.2"
-docker push "$(terraform output -raw ecr_gateway_repository_url):v0.8.2"
+docker pull --platform linux/amd64 ghcr.io/superlinked/sie-gateway:v0.8.3
+docker tag ghcr.io/superlinked/sie-gateway:v0.8.3 "$(terraform output -raw ecr_gateway_repository_url):v0.8.3"
+docker push "$(terraform output -raw ecr_gateway_repository_url):v0.8.3"
 
-docker pull --platform linux/amd64 ghcr.io/superlinked/sie-config:v0.8.2
-docker tag ghcr.io/superlinked/sie-config:v0.8.2 "$(terraform output -raw ecr_config_repository_url):v0.8.2"
-docker push "$(terraform output -raw ecr_config_repository_url):v0.8.2"
+docker pull --platform linux/amd64 ghcr.io/superlinked/sie-config:v0.8.3
+docker tag ghcr.io/superlinked/sie-config:v0.8.3 "$(terraform output -raw ecr_config_repository_url):v0.8.3"
+docker push "$(terraform output -raw ecr_config_repository_url):v0.8.3"
 ```
 
 ## Model cache and payload store
@@ -249,8 +249,8 @@ Because the payload store is required for >1 MiB work items, the shared bucket i
 After apply, pass the bucket into Helm with one terraform output:
 
 ```bash
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.8.2 \
-  -f https://raw.githubusercontent.com/superlinked/sie/v0.8.2/deploy/helm/sie-cluster/values-aws.yaml \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.8.3 \
+  -f https://raw.githubusercontent.com/superlinked/sie/v0.8.3/deploy/helm/sie-cluster/values-aws.yaml \
   --namespace sie --create-namespace \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)" \
   $(terraform output -raw model_cache_helm_args)

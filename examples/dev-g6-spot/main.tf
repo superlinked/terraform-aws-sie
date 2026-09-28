@@ -8,8 +8,8 @@
 #   # Populate the model cache bucket (only if create_model_cache=true):
 #   sie-admin cache populate --bundle default \
 #     --target $(terraform output -raw model_cache_bucket_url)/
-#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.8.2 \
-#     -f https://raw.githubusercontent.com/superlinked/sie/v0.8.2/deploy/helm/sie-cluster/values-aws.yaml \
+#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.8.3 \
+#     -f https://raw.githubusercontent.com/superlinked/sie/v0.8.3/deploy/helm/sie-cluster/values-aws.yaml \
 #     --namespace sie --create-namespace \
 #     --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"=$(terraform output -raw sie_irsa_role_arn) \
 #     $(terraform output -raw model_cache_helm_args)
