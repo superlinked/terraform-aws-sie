@@ -8,7 +8,7 @@ provider "aws" {
 }
 
 variables {
-  api_server_authorized_ip_ranges = ["203.0.113.10/32"]
+  api_server_authorized_ip_ranges = ["8.8.8.8/32"]
 }
 
 # =============================================================================

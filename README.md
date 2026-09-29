@@ -27,7 +27,8 @@ terraform plan
 terraform apply
 ```
 
-`203.0.113.10/32` is a documentation placeholder. See
+`203.0.113.10/32` is a documentation placeholder. The module rejects
+documentation ranges, so replace it with your own address. See
 [Kubernetes API access](#kubernetes-api-access) for the private-endpoint mode.
 
 After apply, configure kubectl and deploy SIE with chart `0.8.3`. Its default
@@ -86,20 +87,46 @@ Choose one mode:
 | `enable_private_endpoint` | `false` | Disable the public endpoint and serve the API only inside the VPC. Run Terraform, kubectl, and Helm from a network that reaches the VPC (VPN, peering, or a runner in the VPC). |
 | `allow_public_api_server` | `false` | Explicit opt-in to accept any Internet address. With an empty allowlist the endpoint allows `0.0.0.0/0`. |
 
-Entries must be IPv4 CIDR blocks, because the module creates an IPv4 cluster
-and EKS accepts IPv6 public access CIDRs only for IPv6 clusters. Ranges
-broader than `/8`, including `0.0.0.0/0`, are rejected unless
-`allow_public_api_server = true`. The private
-endpoint stays enabled in every mode, so nodes always reach the API inside the
-VPC. Every request still needs IAM authentication.
+Rules for `api_server_authorized_ip_ranges`:
 
-**Upgrading from 0.x.** Earlier versions opened the public endpoint to
-`0.0.0.0/0` without an input. The plan now fails with a message asking you to
-choose. To restrict access, set `api_server_authorized_ip_ranges`; the plan
-shows an in-place update of the cluster's `public_access_cidrs`. To keep the
-previous behaviour explicitly, set `allow_public_api_server = true`; the plan
-shows no change to the endpoint. Include the address Terraform runs from, or
-the refresh of the module's Helm releases cannot reach the cluster.
+- Entries must be IPv4 CIDR blocks, because the module creates an IPv4 cluster
+  and EKS accepts IPv6 public access CIDRs only for IPv6 clusters.
+- At most 40 entries, the EKS limit per cluster, which is not adjustable.
+- Together the entries may cover at most 16,777,216 addresses, the size of one
+  `/8`. `0.0.0.0/0`, split halves such as two `/1` blocks, and several broad
+  ranges are rejected unless `allow_public_api_server = true`.
+- Documentation ranges (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`)
+  are rejected, so an unedited placeholder fails at plan time.
+
+The private endpoint stays enabled in every mode, so nodes always reach the API
+inside the VPC. Every request still needs IAM authentication. The
+`api_server_access` output shows the effective endpoint settings.
+
+**Recovering from an allowlist that excludes Terraform.** The module refreshes
+its Helm and Kubernetes resources on every plan, so a plan fails once the
+machine running Terraform is no longer in the allowlist. Widen the list with
+the AWS CLI from any machine with EKS permissions, then set
+`api_server_authorized_ip_ranges` to the same list and apply:
+
+```bash
+aws eks update-cluster-config --region <region> --name <cluster> \
+  --resources-vpc-config endpointPublicAccess=true,publicAccessCidrs="<cidr-1>,<cidr-2>"
+```
+
+Alternatively, correct the variable and run
+`terraform apply -refresh=false -target=module.eks`, which updates the
+endpoint without reading the in-cluster resources, then run a normal plan.
+
+**Upgrading from 0.x.**
+
+- Earlier versions opened the public endpoint to `0.0.0.0/0` without an
+  input. The plan now fails with a message asking you to choose.
+- To restrict access, set `api_server_authorized_ip_ranges`. The plan shows an
+  in-place update of the cluster's `public_access_cidrs`. Include the address
+  Terraform runs from, or the refresh of the module's Helm releases cannot
+  reach the cluster.
+- To keep the previous behaviour explicitly, set
+  `allow_public_api_server = true`. The plan shows no change to the endpoint.
 
 ### GPU configuration
 
@@ -185,6 +212,7 @@ After `terraform apply`, use these outputs to connect and deploy:
 | Output | Description |
 |--------|-------------|
 | `kubectl_config_command` | Run this to configure kubectl |
+| `api_server_access` | Effective API endpoint access: public endpoint on or off and the CIDRs it accepts |
 | `cluster_name` | EKS cluster name |
 | `cluster_endpoint` | Kubernetes API endpoint (sensitive) |
 | `ecr_server_repository_url` | Where to push `sie-server` images |

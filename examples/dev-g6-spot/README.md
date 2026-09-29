@@ -22,8 +22,9 @@ Creates a minimal EKS cluster with a single g6.2xlarge spot GPU node group (NVID
 The Kubernetes API endpoint accepts only the CIDRs you list. Include the
 address the machine running Terraform, kubectl, and Helm uses to reach the
 Internet, because the module installs Helm releases during `terraform apply`.
-`203.0.113.10/32` below is a documentation placeholder; replace it with your
-own range.
+`203.0.113.10/32` below is a documentation placeholder. The module rejects
+documentation ranges, so replace it with your own address. See the module
+README for the allowlist rules and how to recover if the list excludes you.
 
 ```bash
 curl -s https://checkip.amazonaws.com   # your egress address; append /32
