@@ -95,11 +95,13 @@ Rules for `api_server_authorized_ip_ranges`:
 - Together the entries may cover at most 16,777,216 addresses, the size of one
   `/8`. `0.0.0.0/0`, split halves such as two `/1` blocks, and several broad
   ranges are rejected unless `allow_public_api_server = true`.
-- Documentation ranges (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`)
-  are rejected, so an unedited placeholder fails at plan time.
+- Entries inside a documentation range (`192.0.2.0/24`, `198.51.100.0/24`,
+  `203.0.113.0/24`) are rejected, so an unedited placeholder fails at plan
+  time. Broader entries that contain one need `allow_public_api_server = true`.
 
 The private endpoint stays enabled in every mode, so nodes always reach the API
-inside the VPC. Every request still needs IAM authentication. The
+inside the VPC. Network restrictions are in addition to Kubernetes API
+authentication and authorization, which every request must still pass. The
 `api_server_access` output shows the effective endpoint settings.
 
 **Recovering from an allowlist that excludes Terraform.** The module refreshes

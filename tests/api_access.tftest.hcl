@@ -150,6 +150,27 @@ run "rejects_documentation_placeholder" {
   expect_failures = [var.api_server_authorized_ip_ranges]
 }
 
+run "rejects_documentation_placeholder_even_with_opt_in" {
+  command = plan
+
+  variables {
+    allow_public_api_server         = true
+    api_server_authorized_ip_ranges = ["203.0.113.10/32"]
+  }
+
+  expect_failures = [var.api_server_authorized_ip_ranges]
+}
+
+run "rejects_range_containing_documentation_range" {
+  command = plan
+
+  variables {
+    api_server_authorized_ip_ranges = ["203.0.112.0/23"]
+  }
+
+  expect_failures = [var.api_server_authorized_ip_ranges]
+}
+
 run "rejects_more_than_40_ranges" {
   command = plan
 
@@ -241,6 +262,20 @@ run "opt_in_accepts_broad_allowlist" {
   assert {
     condition     = output.api_server_access.public_access_cidrs == tolist(["11.0.0.0/8", "12.0.0.0/8"])
     error_message = "allow_public_api_server should accept an allowlist broader than one /8"
+  }
+}
+
+run "opt_in_accepts_explicit_any_address" {
+  command = plan
+
+  variables {
+    allow_public_api_server         = true
+    api_server_authorized_ip_ranges = ["0.0.0.0/0"]
+  }
+
+  assert {
+    condition     = output.api_server_access.public_access_cidrs == tolist(["0.0.0.0/0"])
+    error_message = "allow_public_api_server should accept an explicit 0.0.0.0/0"
   }
 }
 
