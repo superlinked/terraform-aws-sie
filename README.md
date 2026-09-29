@@ -19,10 +19,16 @@ One command to get a GPU-ready EKS cluster for [SIE](https://github.com/superlin
 ```bash
 cd examples/dev-g6-spot
 export AWS_REGION="eu-central-1"   # or your preferred region
+# CIDRs allowed to reach the Kubernetes API; include this machine's egress
+# address (for example the /32 of `curl -s https://checkip.amazonaws.com`).
+export TF_VAR_api_server_authorized_ip_ranges='["203.0.113.10/32"]'
 terraform init
 terraform plan
 terraform apply
 ```
+
+`203.0.113.10/32` is a documentation placeholder. See
+[Kubernetes API access](#kubernetes-api-access) for the private-endpoint mode.
 
 After apply, configure kubectl and deploy SIE with chart `0.8.3`. Its default
 image tags select the matching `v0.8.3` gateway, config, worker, and sidecar
@@ -60,12 +66,38 @@ for adapter options and launch arguments before upgrading.
 
 ### Required
 
-No variables are strictly required - all have sensible defaults. Override these for your environment:
+Choose how the Kubernetes API is reached (see
+[Kubernetes API access](#kubernetes-api-access)); the plan fails until you do.
+The other variables have defaults. Override these for your environment:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `aws_region` | `eu-central-1` | AWS region to deploy in |
 | `project_name` | `sie` | Name prefix for all resources (EKS cluster, IAM roles, etc.) |
+
+### Kubernetes API access
+
+The EKS API endpoint is never open to the whole Internet unless you ask for it.
+Choose one mode:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `api_server_authorized_ip_ranges` | `[]` | CIDRs allowed to reach the public API endpoint. Include every machine that runs `terraform`, `kubectl`, or `helm` against the cluster: the module installs Helm releases (cluster autoscaler, NVIDIA device plugin) during apply. |
+| `enable_private_endpoint` | `false` | Disable the public endpoint and serve the API only inside the VPC. Run Terraform, kubectl, and Helm from a network that reaches the VPC (VPN, peering, or a runner in the VPC). |
+| `allow_public_api_server` | `false` | Explicit opt-in to accept any Internet address. With an empty allowlist the endpoint allows `0.0.0.0/0`. |
+
+Ranges broader than `/8` (IPv4) or `/16` (IPv6), including `0.0.0.0/0` and
+`::/0`, are rejected unless `allow_public_api_server = true`. The private
+endpoint stays enabled in every mode, so nodes always reach the API inside the
+VPC. Every request still needs IAM authentication.
+
+**Upgrading from 0.x.** Earlier versions opened the public endpoint to
+`0.0.0.0/0` without an input. The plan now fails with a message asking you to
+choose. To restrict access, set `api_server_authorized_ip_ranges`; the plan
+shows an in-place update of the cluster's `public_access_cidrs`. To keep the
+previous behaviour explicitly, set `allow_public_api_server = true`; the plan
+shows no change to the endpoint. Include the address Terraform runs from, or
+the refresh of the module's Helm releases cannot reach the cluster.
 
 ### GPU configuration
 
@@ -265,6 +297,7 @@ See `infra/s3_model_cache.tf` and `infra/irsa.tf` for the resource definitions.
 This module follows AWS security best practices out of the box:
 
 - **KMS encryption** - EKS secrets encrypted at rest with a dedicated, auto-rotating KMS key
+- **Restricted API endpoint** - the public Kubernetes API endpoint accepts only `api_server_authorized_ip_ranges`, or is disabled with `enable_private_endpoint`; any-address access needs `allow_public_api_server`
 - **Private subnets** - worker nodes run in private subnets with no public IPs
 - **NAT gateway** - outbound internet via NAT (one per AZ for high availability)
 - **VPC endpoints** - private access to ECR, S3, STS, EC2, CloudWatch, and other services

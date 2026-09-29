@@ -53,3 +53,12 @@ jobs:
 
       - name: Validate Terraform
         run: terraform validate -no-color
+
+      - name: Run Kubernetes API access tests
+        run: terraform test -filter=tests/api_access.tftest.hcl -no-color
+
+      - name: Initialize Terraform example
+        run: terraform -chdir=examples/dev-g6-spot init -backend=false -input=false -no-color
+
+      - name: Validate Terraform example
+        run: terraform -chdir=examples/dev-g6-spot validate -no-color
