@@ -101,7 +101,9 @@ Rules for `api_server_authorized_ip_ranges`:
 
 The private endpoint stays enabled in every mode, so nodes always reach the API
 inside the VPC. Network restrictions are in addition to Kubernetes API
-authentication and authorization, which every request must still pass. The
+authentication and authorization. Apart from the unauthenticated health and
+version endpoints (such as `/healthz`, `/readyz`, and `/version`), every
+request must still pass them. The
 `api_server_access` output shows the effective endpoint settings.
 
 **Recovering from an allowlist that excludes Terraform.** The module refreshes

@@ -146,7 +146,7 @@ variable "enable_private_endpoint" {
 }
 
 variable "allow_public_api_server" {
-  description = "Opt in to a public Kubernetes API endpoint that accepts any Internet address. With an empty api_server_authorized_ip_ranges the endpoint allows 0.0.0.0/0, and the allowlist may cover more than one /8 in total. Requests still need Kubernetes API authentication and authorization."
+  description = "Opt in to a public Kubernetes API endpoint that accepts any Internet address. With an empty api_server_authorized_ip_ranges the endpoint allows 0.0.0.0/0, and the allowlist may cover more than one /8 in total. Apart from the unauthenticated health and version endpoints (such as /healthz, /readyz and /version), requests still need Kubernetes API authentication and authorization."
   type        = bool
   default     = false
   nullable    = false
