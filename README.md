@@ -86,8 +86,10 @@ Choose one mode:
 | `enable_private_endpoint` | `false` | Disable the public endpoint and serve the API only inside the VPC. Run Terraform, kubectl, and Helm from a network that reaches the VPC (VPN, peering, or a runner in the VPC). |
 | `allow_public_api_server` | `false` | Explicit opt-in to accept any Internet address. With an empty allowlist the endpoint allows `0.0.0.0/0`. |
 
-Ranges broader than `/8` (IPv4) or `/16` (IPv6), including `0.0.0.0/0` and
-`::/0`, are rejected unless `allow_public_api_server = true`. The private
+Entries must be IPv4 CIDR blocks, because the module creates an IPv4 cluster
+and EKS accepts IPv6 public access CIDRs only for IPv6 clusters. Ranges
+broader than `/8`, including `0.0.0.0/0`, are rejected unless
+`allow_public_api_server = true`. The private
 endpoint stays enabled in every mode, so nodes always reach the API inside the
 VPC. Every request still needs IAM authentication.
 

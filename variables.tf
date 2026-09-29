@@ -90,21 +90,21 @@ variable "public_subnet_prefix_length" {
 # =============================================================================
 
 variable "api_server_authorized_ip_ranges" {
-  description = "CIDR blocks allowed to reach the EKS public Kubernetes API endpoint. Include the egress address of every machine that runs terraform, kubectl, or helm against the cluster: the module installs Helm releases during apply. Leave empty only with enable_private_endpoint = true or allow_public_api_server = true. Ranges broader than /8 (IPv4) or /16 (IPv6), including 0.0.0.0/0, require allow_public_api_server = true."
+  description = "IPv4 CIDR blocks allowed to reach the EKS public Kubernetes API endpoint. Include the egress address of every machine that runs terraform, kubectl, or helm against the cluster: the module installs Helm releases during apply. Leave empty only with enable_private_endpoint = true or allow_public_api_server = true. Ranges broader than /8, including 0.0.0.0/0, require allow_public_api_server = true."
   type        = list(string)
   default     = []
 
   validation {
-    condition     = alltrue([for cidr in var.api_server_authorized_ip_ranges : can(cidrhost(cidr, 0))])
-    error_message = "Each api_server_authorized_ip_ranges entry must be a CIDR block such as 203.0.113.10/32."
+    condition     = alltrue([for cidr in var.api_server_authorized_ip_ranges : can(cidrhost(cidr, 0)) && !strcontains(cidr, ":")])
+    error_message = "Each api_server_authorized_ip_ranges entry must be an IPv4 CIDR block such as 203.0.113.10/32. The module creates an IPv4 cluster, and EKS accepts IPv6 public access CIDRs only for IPv6 clusters."
   }
 
   validation {
     condition = var.allow_public_api_server || alltrue([
       for cidr in var.api_server_authorized_ip_ranges :
-      try(tonumber(split("/", cidr)[1]) >= (strcontains(cidr, ":") ? 16 : 8), false)
+      try(tonumber(split("/", cidr)[1]) >= 8, false)
     ])
-    error_message = "api_server_authorized_ip_ranges contains a range broader than /8 (IPv4) or /16 (IPv6), such as 0.0.0.0/0. List the specific ranges that need API access, or set allow_public_api_server = true to accept any Internet address."
+    error_message = "api_server_authorized_ip_ranges contains a range broader than /8, such as 0.0.0.0/0. List the specific ranges that need API access, or set allow_public_api_server = true to accept any Internet address."
   }
 
   validation {
@@ -125,7 +125,7 @@ variable "enable_private_endpoint" {
 }
 
 variable "allow_public_api_server" {
-  description = "Opt in to a public Kubernetes API endpoint that accepts any Internet address. With an empty api_server_authorized_ip_ranges the endpoint allows 0.0.0.0/0; ranges broader than /8 (IPv4) or /16 (IPv6) are accepted. Requests still need IAM authentication."
+  description = "Opt in to a public Kubernetes API endpoint that accepts any Internet address. With an empty api_server_authorized_ip_ranges the endpoint allows 0.0.0.0/0; ranges broader than /8 are accepted. Requests still need IAM authentication."
   type        = bool
   default     = false
 }

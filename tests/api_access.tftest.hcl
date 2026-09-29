@@ -85,6 +85,27 @@ run "rejects_ipv6_any_address_without_opt_in" {
   expect_failures = [var.api_server_authorized_ip_ranges]
 }
 
+run "rejects_ipv6_range_for_ipv4_cluster" {
+  command = plan
+
+  variables {
+    api_server_authorized_ip_ranges = ["2001:db8::/128"]
+  }
+
+  expect_failures = [var.api_server_authorized_ip_ranges]
+}
+
+run "rejects_ipv6_range_even_with_opt_in" {
+  command = plan
+
+  variables {
+    allow_public_api_server         = true
+    api_server_authorized_ip_ranges = ["2001:db8::/128"]
+  }
+
+  expect_failures = [var.api_server_authorized_ip_ranges]
+}
+
 run "rejects_split_any_address_without_opt_in" {
   command = plan
 
