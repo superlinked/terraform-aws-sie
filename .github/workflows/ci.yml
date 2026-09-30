@@ -57,6 +57,19 @@ jobs:
       - name: Run Kubernetes API access tests
         run: terraform test -filter=tests/api_access.tftest.hcl -no-color
 
+      - name: Point the example at the module source in this pull request
+        run: |
+          file=examples/dev-g6-spot/main.tf
+          sed -i -E \
+            -e 's#^([[:space:]]*source[[:space:]]*=[[:space:]]*)"superlinked/sie/aws"#\1"../.."#' \
+            -e '/x-release-please-version/d' \
+            "$file"
+          if ! grep -Eq '^[[:space:]]*source[[:space:]]*=[[:space:]]*"\.\./\.\."' "$file" \
+            || grep -Eq '"superlinked/sie/aws"|x-release-please-version' "$file"; then
+            echo "::error file=$file::could not point the example at the local module source"
+            exit 1
+          fi
+
       - name: Initialize Terraform example
         run: terraform -chdir=examples/dev-g6-spot init -backend=false -input=false -no-color
 
