@@ -32,12 +32,19 @@ After apply, deploy SIE via Helm:
 $(terraform output -raw kubectl_config_command)
 
 # Install SIE (gateway, sie-config, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.8.3 \
-  -f https://raw.githubusercontent.com/superlinked/sie/v0.8.3/deploy/helm/sie-cluster/values-aws.yaml \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.9.0 \
+  -f https://raw.githubusercontent.com/superlinked/sie/v0.9.0/deploy/helm/sie-cluster/values-aws.yaml \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)" \
   $(terraform output -raw model_cache_helm_args)
 ```
+
+Chart `0.9.0` has breaking changes for existing releases: NATS authentication
+is on by default, the AWS values file no longer enables the gateway Ingress,
+and `helm upgrade --reuse-values` fails to render. Before upgrading a release
+installed from an earlier chart, follow
+[Upgrading to SIE 0.9.0](../../README.md#upgrading-to-sie-090) in the module
+README.
 
 ## Variables
 

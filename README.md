@@ -24,8 +24,8 @@ terraform plan
 terraform apply
 ```
 
-After apply, configure kubectl and deploy SIE with chart `0.8.3`. Its default
-image tags select the matching `v0.8.3` gateway, config, worker, and sidecar
+After apply, configure kubectl and deploy SIE with chart `0.9.0`. Its default
+image tags select the matching `v0.9.0` gateway, config, worker, and sidecar
 images. The AWS values file is pinned to the same release:
 
 ```bash
@@ -33,16 +33,58 @@ images. The AWS values file is pinned to the same release:
 $(terraform output -raw kubectl_config_command)
 
 # Deploy SIE (gateway, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.8.3 \
-  -f https://raw.githubusercontent.com/superlinked/sie/v0.8.3/deploy/helm/sie-cluster/values-aws.yaml \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.9.0 \
+  -f https://raw.githubusercontent.com/superlinked/sie/v0.9.0/deploy/helm/sie-cluster/values-aws.yaml \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)" \
   $(terraform output -raw model_cache_helm_args)
 ```
 
-For existing installations with custom model profiles, review the
+This creates no Ingress: the gateway Service is `ClusterIP`. To expose the
+gateway outside the cluster, enable the Ingress together with gateway
+authentication and TLS, as described in the chart's
+[Ingress section](https://github.com/superlinked/sie/blob/v0.9.0/deploy/helm/sie-cluster/README.md#authentication-and-tls-requirements).
+
+### Upgrading to SIE 0.9.0
+
+Chart `0.9.0` has breaking changes. Read the
+[SIE 0.9.0 release notes](https://github.com/superlinked/sie/releases/tag/v0.9.0)
+before upgrading an existing release. For a release installed with the command
+above:
+
+- **NATS authentication is on by default.** The upgrade restarts NATS and rolls
+  sie-config, the gateway, and the workers. NATS refuses pods that have not
+  rolled yet, and memory-backed queued work is lost. To avoid the gap, run the
+  command above twice: first with `--set nats.auth.allowAnonymous=true` added,
+  then, once every pod has restarted, with `--set nats.auth.allowAnonymous=false`.
+  See the chart's
+  [NATS authentication section](https://github.com/superlinked/sie/blob/v0.9.0/deploy/helm/sie-cluster/README.md#nats-authentication).
+- **Pass values explicitly.** `helm upgrade --reuse-values` now fails to
+  render. Re-run the full command above, which passes the values file with
+  `-f`, or use `--reset-then-reuse-values` (Helm 3.14 or later).
+- **The AWS values file no longer enables the gateway Ingress.** The upgrade
+  removes the host-less, plain-HTTP Ingress that earlier releases created. To
+  keep external access, enable the Ingress with gateway authentication and TLS.
+  To keep the previous unauthenticated catch-all Ingress, set both
+  `ingress.allowUnauthenticated=true` and `ingress.allowPlaintext=true`. A
+  `LoadBalancer` or `NodePort` gateway Service needs gateway authentication or
+  `gateway.service.allowUnauthenticated=true`, and also
+  `gateway.service.allowPlaintext=true`, because the gateway serves plain HTTP.
+- **sie-config tokens are split.** The upgrade generates a sie-config admin
+  token (Secret `sie-config-admin-token`) and a separate read token for the
+  gateway and the worker sidecars. sie-config then requires a token on every
+  `/v1/configs` request, so give the admin token to tooling that writes model
+  configs. The gateway no longer receives that admin token: with gateway
+  authentication enabled, its admin routes (`POST`, `PUT`, and `DELETE` under
+  `/v1/pools`, `/v1/admin`, and `/v1/configs`) answer `403` until
+  `gateway.auth.adminTokenSecretName` names a separate Secret. Run the
+  sie-config, gateway, and worker sidecar images of the same release. See the
+  chart's
+  [sie-config tokens section](https://github.com/superlinked/sie/blob/v0.9.0/deploy/helm/sie-cluster/README.md#sie-config-tokens).
+
+For existing installations with custom model profiles, also review the
 [SIE 0.8.0 breaking changes](https://github.com/superlinked/sie/releases/tag/v0.8.0)
-for adapter options and launch arguments before upgrading.
+for adapter options and launch arguments before upgrading from 0.7.x.
 
 ## Examples
 
@@ -207,8 +249,11 @@ After `terraform apply`, use these outputs to connect and deploy:
 Requires `create_ecr_repositories = true` (or repos managed by another stack - see `ecr_repository_prefix`).
 
 After `terraform apply`, mirror the released images into ECR. The AWS values
-file enables the `default` and `sglang` worker images; mirror both when
-overriding `workers.common.image.repository`:
+file enables the `default` and `sglang` worker images (its
+`sglang-vision-extract` bundle reuses the `sglang` image); mirror both when
+overriding `workers.common.image.repository`. When upgrading, mirror the
+`v0.9.0` images before running `helm upgrade`: sie-config, the gateway, and the
+worker sidecars must run the same release:
 
 ```bash
 # Authenticate Docker to ECR
@@ -217,20 +262,20 @@ aws ecr get-login-password --region $(terraform output -raw aws_region 2>/dev/nu
 
 # Mirror both worker images selected by values-aws.yaml
 for bundle in default sglang; do
-  tag="v0.8.3-cuda12-${bundle}"
+  tag="v0.9.0-cuda12-${bundle}"
   docker pull --platform linux/amd64 "ghcr.io/superlinked/sie-server:${tag}"
   docker tag "ghcr.io/superlinked/sie-server:${tag}" "$(terraform output -raw ecr_server_repository_url):${tag}"
   docker push "$(terraform output -raw ecr_server_repository_url):${tag}"
 done
 
 # Mirror gateway and config images without changing their release tags
-docker pull --platform linux/amd64 ghcr.io/superlinked/sie-gateway:v0.8.3
-docker tag ghcr.io/superlinked/sie-gateway:v0.8.3 "$(terraform output -raw ecr_gateway_repository_url):v0.8.3"
-docker push "$(terraform output -raw ecr_gateway_repository_url):v0.8.3"
+docker pull --platform linux/amd64 ghcr.io/superlinked/sie-gateway:v0.9.0
+docker tag ghcr.io/superlinked/sie-gateway:v0.9.0 "$(terraform output -raw ecr_gateway_repository_url):v0.9.0"
+docker push "$(terraform output -raw ecr_gateway_repository_url):v0.9.0"
 
-docker pull --platform linux/amd64 ghcr.io/superlinked/sie-config:v0.8.3
-docker tag ghcr.io/superlinked/sie-config:v0.8.3 "$(terraform output -raw ecr_config_repository_url):v0.8.3"
-docker push "$(terraform output -raw ecr_config_repository_url):v0.8.3"
+docker pull --platform linux/amd64 ghcr.io/superlinked/sie-config:v0.9.0
+docker tag ghcr.io/superlinked/sie-config:v0.9.0 "$(terraform output -raw ecr_config_repository_url):v0.9.0"
+docker push "$(terraform output -raw ecr_config_repository_url):v0.9.0"
 ```
 
 ## Model cache and payload store
@@ -249,8 +294,8 @@ Because the payload store is required for >1 MiB work items, the shared bucket i
 After apply, pass the bucket into Helm with one terraform output:
 
 ```bash
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.8.3 \
-  -f https://raw.githubusercontent.com/superlinked/sie/v0.8.3/deploy/helm/sie-cluster/values-aws.yaml \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.9.0 \
+  -f https://raw.githubusercontent.com/superlinked/sie/v0.9.0/deploy/helm/sie-cluster/values-aws.yaml \
   --namespace sie --create-namespace \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)" \
   $(terraform output -raw model_cache_helm_args)
@@ -283,7 +328,7 @@ Some pieces of a production deployment are intentionally not turnkey - either be
   - `cert-manager` - install cert-manager once in the cluster; the chart annotates the Ingress for automated Let's Encrypt issuance via HTTP-01.
   - `self-signed` - for air-gapped clusters; set `certManagerBundle.certManager.install: true` to bundle cert-manager (single-tenant clusters only).
 
-  See the [chart README's TLS / HTTPS section](../../helm/sie-cluster/README.md#tls--https). DNS-01 / wildcard / ACM paths are out of scope for the chart.
+  See the [chart README's TLS / HTTPS section](https://github.com/superlinked/sie/blob/v0.9.0/deploy/helm/sie-cluster/README.md#tls--https). DNS-01 / wildcard / ACM paths are out of scope for the chart.
 - **DNS / domain** - always BYO. This module does not provision Route53 zones or records. After `terraform apply`, take the ingress controller's LoadBalancer hostname (`kubectl -n ingress-nginx get svc ingress-nginx-controller`) and create an A/AAAA record pointing at it under a domain you control.
 - **OIDC provider** - BYO. When `auth.enabled: true` in the chart, set `auth.oauth2Proxy.oidcIssuerUrl` and the corresponding client ID / secret to your existing identity provider (Okta, Auth0, Google Workspace, Azure AD, ...). The module does not create an IdP.
 
