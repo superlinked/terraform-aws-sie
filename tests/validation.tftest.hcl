@@ -7,6 +7,10 @@ provider "aws" {
   region = "eu-central-1"
 }
 
+variables {
+  api_server_authorized_ip_ranges = ["8.8.8.8/32"]
+}
+
 # =============================================================================
 # Variable Validation Tests (plan-only, no infrastructure)
 # =============================================================================

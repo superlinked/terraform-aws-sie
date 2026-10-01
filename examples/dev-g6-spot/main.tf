@@ -25,7 +25,11 @@
 #      when the server, gateway and config images are mirrored to ECR
 #
 # Usage:
-#   cd deploy/terraform/aws/examples/dev-g6-spot
+#   cd examples/dev-g6-spot
+#   # CIDRs allowed to reach the Kubernetes API. Include the address this
+#   # machine uses to reach the Internet, for example the /32 of
+#   # `curl -s https://checkip.amazonaws.com`.
+#   export TF_VAR_api_server_authorized_ip_ranges='["203.0.113.10/32"]'
 #   terraform init
 #   terraform plan
 #   terraform apply
@@ -56,6 +60,11 @@ variable "project_name" {
   default     = "sie-dev"
 }
 
+variable "api_server_authorized_ip_ranges" {
+  description = "CIDR blocks allowed to reach the Kubernetes API, such as [\"203.0.113.10/32\"]. Include the egress address of the machine that runs terraform, kubectl, and helm."
+  type        = list(string)
+}
+
 provider "aws" {
   region = var.aws_region
 
@@ -69,7 +78,7 @@ provider "aws" {
 
 module "sie_eks" {
   source  = "superlinked/sie/aws"
-  version = "0.7.2"
+  version = "0.7.3" # x-release-please-version
 
   aws_region        = var.aws_region
   project_name      = var.project_name
@@ -77,6 +86,8 @@ module "sie_eks" {
   gpu_capacity_type = "SPOT"
   gpu_min_size      = 0
   gpu_max_size      = 5
+
+  api_server_authorized_ip_ranges = var.api_server_authorized_ip_ranges
 
   create_model_cache = true # creates an S3 bucket; remove or set to false to skip
   # creates account-scoped ECR repos (sie-dev/sie-server etc.); remove or set false to skip

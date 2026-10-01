@@ -6,7 +6,7 @@ Creates a minimal EKS cluster with a single g6.2xlarge spot GPU node group (NVID
 
 | Resource | Configuration |
 |----------|---------------|
-| EKS cluster | Private subnets, KMS-encrypted secrets, Kubernetes 1.35 |
+| EKS cluster | Private subnets, KMS-encrypted secrets, Kubernetes 1.35, API endpoint restricted to `api_server_authorized_ip_ranges` |
 | GPU node group | 1x NVIDIA L4 per node (g6.2xlarge), spot instances, scale 0-5 |
 | CPU node group | t3.xlarge (system workloads), scale 1-5 |
 | VPC | 2 AZs, public + private subnets, NAT gateway, VPC endpoints |
@@ -19,7 +19,16 @@ Creates a minimal EKS cluster with a single g6.2xlarge spot GPU node group (NVID
 
 ## Usage
 
+The Kubernetes API endpoint accepts only the CIDRs you list. Include the
+address the machine running Terraform, kubectl, and Helm uses to reach the
+Internet, because the module installs Helm releases during `terraform apply`.
+`203.0.113.10/32` below is a documentation placeholder. The module rejects
+documentation ranges, so replace it with your own address. See the module
+README for the allowlist rules and how to recover if the list excludes you.
+
 ```bash
+curl -s https://checkip.amazonaws.com   # your egress address; append /32
+export TF_VAR_api_server_authorized_ip_ranges='["203.0.113.10/32"]'
 terraform init
 terraform plan
 terraform apply
@@ -45,6 +54,7 @@ helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster 
 |----------|---------|-------------|
 | `aws_region` | `eu-central-1` | AWS region |
 | `project_name` | `sie-dev` | Name prefix for all resources |
+| `api_server_authorized_ip_ranges` | _(required)_ | CIDRs allowed to reach the Kubernetes API, such as `["203.0.113.10/32"]` |
 
 ## Outputs
 

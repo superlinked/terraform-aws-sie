@@ -86,6 +86,73 @@ variable "public_subnet_prefix_length" {
 }
 
 # =============================================================================
+# Kubernetes API Access
+# =============================================================================
+
+variable "api_server_authorized_ip_ranges" {
+  description = "IPv4 CIDR blocks allowed to reach the EKS public Kubernetes API endpoint, at most 40. Include the egress address of every machine that runs terraform, kubectl, or helm against the cluster: the module installs Helm releases during apply. Leave empty only with enable_private_endpoint = true or allow_public_api_server = true. Together the ranges may cover at most 16,777,216 addresses (one /8) unless allow_public_api_server = true. Entries inside a documentation range (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24) are rejected, and broader entries that contain one need allow_public_api_server = true."
+  type        = list(string)
+  default     = []
+  nullable    = false
+
+  validation {
+    condition     = alltrue([for cidr in var.api_server_authorized_ip_ranges : can(cidrhost(cidr, 0)) && !strcontains(cidr, ":")])
+    error_message = "Each api_server_authorized_ip_ranges entry must be an IPv4 CIDR block (an address with a prefix length, such as <egress-address>/32). The module creates an IPv4 cluster, and EKS accepts IPv6 public access CIDRs only for IPv6 clusters."
+  }
+
+  validation {
+    condition     = length(var.api_server_authorized_ip_ranges) <= 40
+    error_message = "api_server_authorized_ip_ranges accepts at most 40 entries: EKS allows 40 public endpoint access CIDR ranges per cluster and the quota is not adjustable (https://docs.aws.amazon.com/general/latest/gr/eks.html#limits_eks)."
+  }
+
+  validation {
+    condition = alltrue([
+      for cidr in var.api_server_authorized_ip_ranges : !try(
+        (tonumber(split("/", cidr)[1]) >= 24 || !var.allow_public_api_server)
+        && anytrue([
+          for doc in ["192.0.2.0", "198.51.100.0", "203.0.113.0"] :
+          cidrhost("${cidrhost(cidr, 0)}/${min(tonumber(split("/", cidr)[1]), 24)}", 0) == cidrhost("${doc}/${min(tonumber(split("/", cidr)[1]), 24)}", 0)
+        ]),
+        false
+      )
+    ])
+    error_message = "api_server_authorized_ip_ranges overlaps a documentation range (192.0.2.0/24, 198.51.100.0/24, or 203.0.113.0/24), such as the README placeholder. Replace it with the real egress address of the machines that need API access. A broader range that contains a documentation range needs allow_public_api_server = true."
+  }
+
+  validation {
+    condition = var.allow_public_api_server || try(
+      sum(concat([0], [for cidr in var.api_server_authorized_ip_ranges : pow(2, 32 - tonumber(split("/", cidr)[1]))])) <= pow(2, 24),
+      false
+    )
+    error_message = "api_server_authorized_ip_ranges covers more than 16,777,216 addresses (one /8) in total, for example 0.0.0.0/0 or several broad ranges. List the specific ranges that need API access, or set allow_public_api_server = true to accept any Internet address."
+  }
+
+  validation {
+    condition     = var.enable_private_endpoint || var.allow_public_api_server || length(var.api_server_authorized_ip_ranges) > 0
+    error_message = "Choose how the Kubernetes API is reached: set api_server_authorized_ip_ranges to the CIDRs that run terraform, kubectl, and helm (for example your egress address as /32), set enable_private_endpoint = true to serve the API only inside the VPC, or set allow_public_api_server = true to accept any Internet address."
+  }
+
+  validation {
+    condition     = !(var.enable_private_endpoint && length(var.api_server_authorized_ip_ranges) > 0)
+    error_message = "api_server_authorized_ip_ranges applies to the public endpoint, which enable_private_endpoint = true disables. Set one or the other."
+  }
+}
+
+variable "enable_private_endpoint" {
+  description = "Serve the Kubernetes API only on the private endpoint inside the VPC and disable the public endpoint. terraform apply must then run from a network that reaches the VPC (VPN, peering, or a runner inside the VPC), because the module installs Helm releases."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+variable "allow_public_api_server" {
+  description = "Opt in to a public Kubernetes API endpoint that accepts any Internet address. With an empty api_server_authorized_ip_ranges the endpoint allows 0.0.0.0/0, and the allowlist may cover more than one /8 in total. Apart from the unauthenticated health and version endpoints (such as /healthz, /readyz and /version), requests still need Kubernetes API authentication and authorization."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+# =============================================================================
 # SIE Application Configuration
 # =============================================================================
 
