@@ -20,6 +20,14 @@ output "kubectl_config_command" {
   value       = "aws eks update-kubeconfig --name ${module.eks.cluster_name} --region ${var.aws_region}"
 }
 
+output "api_server_access" {
+  description = "Effective Kubernetes API endpoint access passed to EKS: whether the public endpoint is enabled and the CIDRs it accepts (null when it is disabled). The private endpoint is always enabled."
+  value = {
+    public_endpoint_enabled = local.endpoint_public_access
+    public_access_cidrs     = local.endpoint_public_access_cidrs
+  }
+}
+
 # =============================================================================
 # GPU Node Pool
 # =============================================================================

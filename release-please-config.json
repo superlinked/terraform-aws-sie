@@ -8,6 +8,9 @@
       "include-v-in-release-name": true,
       "exclude-paths": [
         ".github"
+      ],
+      "extra-files": [
+        "examples/dev-g6-spot/main.tf"
       ]
     }
   }

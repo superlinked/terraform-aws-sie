@@ -80,6 +80,13 @@ locals {
     var.observability_node_group.ami_type,
     try(contains(data.aws_ec2_instance_type.observability[0].supported_architectures, "arm64"), false) ? "AL2023_ARM_64_STANDARD" : "AL2023_x86_64_STANDARD",
   )
+
+  endpoint_public_access = !var.enable_private_endpoint && (length(var.api_server_authorized_ip_ranges) > 0 || var.allow_public_api_server)
+  endpoint_public_access_cidrs = (
+    !local.endpoint_public_access ? null
+    : length(var.api_server_authorized_ip_ranges) > 0 ? var.api_server_authorized_ip_ranges
+    : ["0.0.0.0/0"]
+  )
 }
 
 # Resolves the observability instance's architecture (only queried when the group
@@ -101,8 +108,8 @@ module "eks" {
   subnet_ids = module.vpc.private_subnets
 
   endpoint_private_access                      = true
-  endpoint_public_access                       = true          # TODO: Disable for production or restrict CIDRs
-  endpoint_public_access_cidrs                 = ["0.0.0.0/0"] # TODO: Restrict to corporate IPs in production
+  endpoint_public_access                       = local.endpoint_public_access
+  endpoint_public_access_cidrs                 = local.endpoint_public_access_cidrs
   node_security_group_enable_recommended_rules = true
 
   # Grants admin access to whoever runs terraform apply
