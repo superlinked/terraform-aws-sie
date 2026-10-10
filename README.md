@@ -62,7 +62,10 @@ kubectl -n sie port-forward svc/sie-gateway 8080:8080
 ### Upgrading to SIE 0.10.0
 
 Chart `0.10.0` requires no new values, and the AWS values file is unchanged
-from `0.9.0`. To upgrade a `0.9.0` release, re-run the command above. The
+from `0.9.0`. To upgrade a `0.9.0` release, re-run the command above together
+with any other values files and `--set` options the release uses, because Helm
+drops overrides that the upgrade does not pass again. Alternatively, add
+`--reset-then-reuse-values` (Helm 3.14 or later) to keep them. The
 [SIE 0.10.0 release notes](https://github.com/superlinked/sie/releases/tag/v0.10.0)
 list one breaking change, in the server: a LoRA whose PEFT config sets `bias`
 to `"all"` or `"lora_only"` no longer loads. A model profile that declares one
