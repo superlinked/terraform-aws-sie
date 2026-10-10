@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/superlinked/terraform-aws-sie/compare/v1.0.0...v1.0.1) (2026-10-10)
+
+
+### Bug Fixes
+
+* pin EKS deployment examples to SIE 0.10.0 ([#8](https://github.com/superlinked/terraform-aws-sie/issues/8)) ([eef7138](https://github.com/superlinked/terraform-aws-sie/commit/eef7138531d61d6f65f376caa8dcf37b216e6184))
+
 ## [1.0.0](https://github.com/superlinked/terraform-aws-sie/compare/v0.7.3...v1.0.0) (2026-10-01)
 
 
