@@ -34,22 +34,39 @@ terraform plan
 terraform apply
 ```
 
-After apply, deploy SIE via Helm:
+After apply, select the latest stable SIE chart once and deploy it with its
+bundled AWS values. The Terraform module release is independent of SIE:
 
 ```bash
+set -euo pipefail
+
 # Configure kubectl
 $(terraform output -raw kubectl_config_command)
 
+# For a controlled upgrade, add --version <reviewed-chart-version> to this pull,
+# replacing the placeholder before running it.
+SIE_CHART_DIR=$(mktemp -d)
+helm pull oci://ghcr.io/superlinked/charts/sie-cluster \
+  --untar --untardir "$SIE_CHART_DIR"
+SIE_CHART="$SIE_CHART_DIR/sie-cluster"
+helm show chart "$SIE_CHART"
+
 # Install SIE (gateway, sie-config, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster --version 0.10.0 \
-  -f https://raw.githubusercontent.com/superlinked/sie/v0.10.0/deploy/helm/sie-cluster/values-aws.yaml \
+helm upgrade --install sie-cluster "$SIE_CHART" \
+  -f "$SIE_CHART/values-aws.yaml" \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)" \
   $(terraform output -raw model_cache_helm_args)
 ```
 
+Keep the selected chart directory and its displayed version metadata with your
+deployment record. The chart selects matching release image tags; its bundled
+README and values describe that selection. For optional ECR mirroring, use the
+module README's [complete mirroring flow](../../README.md#pushing-images-to-ecr)
+instead, which mirrors and installs from the same selected chart.
+
 Before upgrading a release installed from an earlier chart, follow
-[Upgrading to SIE 0.10.0](../../README.md#upgrading-to-sie-0100) in the module
+[Upgrading SIE](../../README.md#upgrading-sie) in the module
 README. Chart `0.9.0` had breaking changes for existing releases: NATS
 authentication is on by default, the AWS values file no longer enables the
 gateway Ingress, and `helm upgrade --reuse-values` fails to render. A release
