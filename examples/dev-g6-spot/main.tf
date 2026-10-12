@@ -81,7 +81,7 @@ provider "aws" {
 
 module "sie_eks" {
   source  = "superlinked/sie/aws"
-  version = "1.0.1" # x-release-please-version
+  version = "1.0.2" # x-release-please-version
 
   aws_region        = var.aws_region
   project_name      = var.project_name
