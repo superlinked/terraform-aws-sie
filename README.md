@@ -31,10 +31,9 @@ terraform apply
 documentation ranges, so replace it with your own address. See
 [Kubernetes API access](#kubernetes-api-access) for the private-endpoint mode.
 
-After apply, configure kubectl and select the latest stable SIE chart once.
+After apply, configure kubectl and deploy the latest stable SIE chart directly.
 The Terraform module and SIE runtime are versioned independently; a new SIE
-release does not require a new Terraform module release. The chart supplies
-its matching image tags and AWS values file:
+release does not require a new Terraform module release:
 
 ```bash
 set -euo pipefail
@@ -42,26 +41,17 @@ set -euo pipefail
 # Point kubectl at the new cluster
 $(terraform output -raw kubectl_config_command)
 
-# Omit --version to select the latest stable chart; see Upgrading SIE below.
-SIE_CHART_DIR=$(mktemp -d)
-helm pull oci://ghcr.io/superlinked/charts/sie-cluster \
-  --untar --untardir "$SIE_CHART_DIR"
-SIE_CHART="$SIE_CHART_DIR/sie-cluster"
-helm show chart "$SIE_CHART"
-
 # Deploy SIE (gateway, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster "$SIE_CHART" \
-  -f "$SIE_CHART/values-aws.yaml" \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster \
+  -f https://raw.githubusercontent.com/superlinked/sie/main/deploy/helm/sie-cluster/values-aws.yaml \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)" \
   $(terraform output -raw model_cache_helm_args)
 ```
 
-Keep the selected chart directory and its displayed `version` / `appVersion`
-with your deployment record. Its bundled `README.md` and values files describe
-that artifact; general chart documentation links below follow public `main`.
-For ECR mirroring, use the complete [mirroring flow](#pushing-images-to-ecr)
-instead of this install flow so images and installation share one selection.
+This rolling quickstart uses the latest chart and public `main` values, which
+can advance independently. For reproducible production upgrades, see
+[Upgrading SIE](#upgrading-sie). Optional ECR mirroring is [below](#pushing-images-to-ecr).
 
 This creates no Ingress: the gateway Service is `ClusterIP`. To expose the
 gateway outside the cluster, enable the Ingress together with gateway
@@ -77,15 +67,14 @@ kubectl -n sie port-forward svc/sie-gateway 8080:8080
 
 ### Upgrading SIE
 
-For production and controlled upgrades, choose a reviewed chart version rather
-than resolving latest again. Add `--version <reviewed-chart-version>` to the
-`helm pull` command above, replacing the placeholder with that chart version
-before running it. Do not use `--version latest` or a `latest` container tag.
+For reproducible production or multi-step upgrades, optionally add
+`--version <reviewed-chart-version>` directly to the Helm command and replace
+`main` in the values URL with the matching reviewed SIE release tag/ref.
+Replace the version placeholder before running; keep the same pair for every step.
+Do not use `--version latest` or a `latest` container tag.
 Review the [SIE release notes](https://github.com/superlinked/sie/releases)
 between your installed and selected versions, including the historical
-migration notices below. Pull once, review the extracted chart and bundled AWS
-values, then use that same local artifact for every rollout step and any image
-mirroring. Do not re-run the pull between migration steps.
+migration notices below.
 
 Pass all existing values files and `--set` options again: Helm drops overrides
 that the upgrade does not pass. Alternatively, use `--reset-then-reuse-values`
@@ -95,8 +84,8 @@ authentication, TLS, workload identity and storage configuration explicit.
 ### Upgrading to SIE 0.10.0
 
 Chart `0.10.0` requires no new values, and the AWS values file is unchanged
-from `0.9.0`. For this historical migration, select chart `0.10.0` explicitly
-on the pull, then run the local-chart install command above together
+from `0.9.0`. For this historical migration, add `--version 0.10.0` to the Helm
+command and use `v0.10.0` instead of `main` in the values URL, together
 with any other values files and `--set` options the release uses, because Helm
 drops overrides that the upgrade does not pass again. Alternatively, add
 `--reset-then-reuse-values` (Helm 3.14 or later) to keep them. The
@@ -123,8 +112,8 @@ above:
   sie-config, or worker pod that has not been replaced yet has no credentials,
   and NATS refuses it: requests can fail with `503`, and workers that have not
   restarted take no work until they do. To avoid that gap, run the
-  local-chart install command above twice, without pulling again: first with
-  `--set nats.auth.allowAnonymous=true` added,
+  Helm command above twice with the same explicit chart version and matching
+  values ref: first with `--set nats.auth.allowAnonymous=true` added,
   then, once every pod has restarted, with `--set nats.auth.allowAnonymous=false`.
   Between the two steps NATS also accepts anonymous clients, with unrestricted
   permissions, and the chart ships no NetworkPolicy for the NATS pods, so allow
@@ -133,7 +122,7 @@ above:
   chart's
   [NATS authentication section](https://github.com/superlinked/sie/blob/main/deploy/helm/sie-cluster/README.md#nats-authentication).
 - **Pass values explicitly.** `helm upgrade --reuse-values` now fails to
-  render. Re-run the local-chart install command, which passes the values file with
+  render. Re-run the Helm command, which passes the values file with
   `-f`, or use `--reset-then-reuse-values` (Helm 3.14 or later).
 - **The AWS values file no longer enables the gateway Ingress.** The upgrade
   removes the host-less, plain-HTTP Ingress that earlier releases created. To
@@ -395,24 +384,25 @@ file enables the `default` and `sglang` worker images (its
 `sglang-vision-extract` bundle reuses the `sglang` image); mirror both when
 overriding `workers.common.image.repository`. This alternative install flow
 selects one chart and mirrors its versioned image tags before deploying that
-same chart. For an upgrade, first follow [Upgrading SIE](#upgrading-sie) and add
-the reviewed `--version` to the pull. sie-config, the gateway, and the worker
-sidecars must run the same release:
+same chart. Metadata is read once; the final Helm command pins that selection
+and its matching values tag so a new release during mirroring cannot change it.
+For a controlled upgrade, add the reviewed `--version` to `helm show chart`
+and follow [Upgrading SIE](#upgrading-sie). sie-config, the gateway, and the
+worker sidecars must run the same release:
 
 ```bash
 set -euo pipefail
 
 $(terraform output -raw kubectl_config_command)
-SIE_CHART_DIR=$(mktemp -d)
-helm pull oci://ghcr.io/superlinked/charts/sie-cluster \
-  --untar --untardir "$SIE_CHART_DIR"
-SIE_CHART="$SIE_CHART_DIR/sie-cluster"
-helm show chart "$SIE_CHART"
-SIE_APP_VERSION=$(awk '$1 == "appVersion:" {gsub(/["\047]/, "", $2); print $2}' "$SIE_CHART/Chart.yaml")
+SIE_CHART_METADATA=$(helm show chart oci://ghcr.io/superlinked/charts/sie-cluster)
+SIE_CHART_VERSION=$(printf '%s\n' "$SIE_CHART_METADATA" | awk '/^version:/ {gsub(/["\047]/, "", $2); print $2}')
+SIE_APP_VERSION=$(printf '%s\n' "$SIE_CHART_METADATA" | awk '/^appVersion:/ {gsub(/["\047]/, "", $2); print $2}')
+: "${SIE_CHART_VERSION:?Selected chart must declare version}"
 : "${SIE_APP_VERSION:?Selected chart must declare appVersion}"
 
 # Authenticate Docker to ECR
-aws ecr get-login-password --region "$(terraform output -raw aws_region 2>/dev/null || echo "$AWS_REGION")" \
+: "${AWS_REGION:?Set AWS_REGION to the cluster region}"
+aws ecr get-login-password --region "$AWS_REGION" \
   | docker login --username AWS --password-stdin "$(terraform output -raw ecr_server_repository_url | cut -d/ -f1)"
 
 # Mirror both worker images selected by values-aws.yaml
@@ -432,8 +422,9 @@ docker pull --platform linux/amd64 "ghcr.io/superlinked/sie-config:${SIE_APP_VER
 docker tag "ghcr.io/superlinked/sie-config:${SIE_APP_VERSION}" "$(terraform output -raw ecr_config_repository_url):${SIE_APP_VERSION}"
 docker push "$(terraform output -raw ecr_config_repository_url):${SIE_APP_VERSION}"
 
-helm upgrade --install sie-cluster "$SIE_CHART" \
-  -f "$SIE_CHART/values-aws.yaml" \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster \
+  --version "$SIE_CHART_VERSION" \
+  -f "https://raw.githubusercontent.com/superlinked/sie/${SIE_APP_VERSION}/deploy/helm/sie-cluster/values-aws.yaml" \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)" \
   --set-string "workers.common.image.repository=$(terraform output -raw ecr_server_repository_url)" \
@@ -444,9 +435,9 @@ helm upgrade --install sie-cluster "$SIE_CHART" \
 
 `appVersion` already includes the `v` prefix; do not add another. Leave image
 tags unset so the selected chart uses the mirrored release tags and worker
-bundle suffixes. The sidecar stays on the chart's matching GHCR default. Keep
-this chart directory for the deployment record. If you customize image tags,
-digests, worker bundles or platforms, mirror the actual configured images
+bundle suffixes. The sidecar stays on the chart's matching GHCR default.
+If you customize image tags, digests, worker bundles or platforms, mirror the
+actual configured images
 before using the repository overrides above, and preserve your other values.
 
 ## Model cache and payload store
@@ -466,22 +457,15 @@ After apply, pass the bucket into Helm with one terraform output:
 
 ```bash
 set -euo pipefail
-SIE_CHART_DIR=$(mktemp -d)
-helm pull oci://ghcr.io/superlinked/charts/sie-cluster \
-  --untar --untardir "$SIE_CHART_DIR"
-SIE_CHART="$SIE_CHART_DIR/sie-cluster"
-helm show chart "$SIE_CHART"
-helm upgrade --install sie-cluster "$SIE_CHART" \
-  -f "$SIE_CHART/values-aws.yaml" \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster \
+  -f https://raw.githubusercontent.com/superlinked/sie/main/deploy/helm/sie-cluster/values-aws.yaml \
   --namespace sie --create-namespace \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)" \
   $(terraform output -raw model_cache_helm_args)
 ```
 
 For an existing release, use a reviewed chart version and preserve all other
-values as described in [Upgrading SIE](#upgrading-sie). This is an alternative
-install example; retain its selected chart directory rather than pulling
-again for another step of the same deployment.
+values as described in [Upgrading SIE](#upgrading-sie).
 
 The chart auto-derives `payloadStore.url` from `workers.common.clusterCache.url`, so a single `--set` for the cache covers both the optional weights cache (`models/`) and the payload store (`payloads/`); the `payload_store_url` output is exposed for visibility and can be wired explicitly via `--set payloadStore.url=...` for the rare override case. On the chart side `payloadStore.enabled` defaults to `true`, decoupled from the optional `workers.common.clusterCache`. Operators who bring their own object-storage bucket can opt out (`create_model_cache = false`) and wire `payloadStore.url` themselves; skipping the payload store entirely means work items larger than 1 MiB (e.g. images) fail.
 

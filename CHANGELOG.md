@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.2](https://github.com/superlinked/terraform-aws-sie/compare/v1.0.1...v1.0.2) (2026-10-12)
+
+
+### Documentation
+
+* decouple SIE installation guides from module releases ([#10](https://github.com/superlinked/terraform-aws-sie/issues/10)) ([936de84](https://github.com/superlinked/terraform-aws-sie/commit/936de847c862ab69d93e08c1a39011524e387d39))
+* simplify Helm installs to direct OCI ([100e913](https://github.com/superlinked/terraform-aws-sie/commit/100e913166b43f247a7242bc256fc5f3f872a082))
+
 ## [1.0.1](https://github.com/superlinked/terraform-aws-sie/compare/v1.0.0...v1.0.1) (2026-10-10)
 
 

@@ -9,16 +9,10 @@
 #   # Populate the model cache bucket (only if create_model_cache=true):
 #   sie-admin cache populate --bundle default \
 #     --target "$(terraform output -raw model_cache_bucket_url)/"
-#   # Latest stable by default. For upgrades, follow ../../README.md#upgrading-sie
-#   # and add --version <reviewed-chart-version> to the pull after replacing it.
-#   SIE_CHART_DIR=$(mktemp -d)
-#   helm pull oci://ghcr.io/superlinked/charts/sie-cluster \
-#     --untar --untardir "$SIE_CHART_DIR"
-#   SIE_CHART="$SIE_CHART_DIR/sie-cluster"
-#   helm show chart "$SIE_CHART"
-#   # Keep this artifact and its version metadata for all rollout steps.
-#   helm upgrade --install sie-cluster "$SIE_CHART" \
-#     -f "$SIE_CHART/values-aws.yaml" \
+#   # Rolling latest chart / main values; see ../../README.md#upgrading-sie
+#   # for the optional pinned production upgrade.
+#   helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster \
+#     -f https://raw.githubusercontent.com/superlinked/sie/main/deploy/helm/sie-cluster/values-aws.yaml \
 #     --namespace sie --create-namespace \
 #     --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)" \
 #     $(terraform output -raw model_cache_helm_args)
@@ -87,7 +81,7 @@ provider "aws" {
 
 module "sie_eks" {
   source  = "superlinked/sie/aws"
-  version = "1.0.1" # x-release-please-version
+  version = "1.0.2" # x-release-please-version
 
   aws_region        = var.aws_region
   project_name      = var.project_name

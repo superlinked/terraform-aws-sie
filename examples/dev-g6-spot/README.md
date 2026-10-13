@@ -34,8 +34,8 @@ terraform plan
 terraform apply
 ```
 
-After apply, select the latest stable SIE chart once and deploy it with its
-bundled AWS values. The Terraform module release is independent of SIE:
+After apply, deploy the latest stable SIE chart directly with public `main`
+AWS values. The Terraform module release is independent of SIE:
 
 ```bash
 set -euo pipefail
@@ -43,27 +43,16 @@ set -euo pipefail
 # Configure kubectl
 $(terraform output -raw kubectl_config_command)
 
-# For a controlled upgrade, add --version <reviewed-chart-version> to this pull,
-# replacing the placeholder before running it.
-SIE_CHART_DIR=$(mktemp -d)
-helm pull oci://ghcr.io/superlinked/charts/sie-cluster \
-  --untar --untardir "$SIE_CHART_DIR"
-SIE_CHART="$SIE_CHART_DIR/sie-cluster"
-helm show chart "$SIE_CHART"
-
 # Install SIE (gateway, sie-config, workers, KEDA, Prometheus, Grafana)
-helm upgrade --install sie-cluster "$SIE_CHART" \
-  -f "$SIE_CHART/values-aws.yaml" \
+helm upgrade --install sie-cluster oci://ghcr.io/superlinked/charts/sie-cluster \
+  -f https://raw.githubusercontent.com/superlinked/sie/main/deploy/helm/sie-cluster/values-aws.yaml \
   --create-namespace -n sie \
   --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$(terraform output -raw sie_irsa_role_arn)" \
   $(terraform output -raw model_cache_helm_args)
 ```
 
-Keep the selected chart directory and its displayed version metadata with your
-deployment record. The chart selects matching release image tags; its bundled
-README and values describe that selection. For optional ECR mirroring, use the
-module README's [complete mirroring flow](../../README.md#pushing-images-to-ecr)
-instead, which mirrors and installs from the same selected chart.
+For optional ECR mirroring, use the module README's
+[mirroring flow](../../README.md#pushing-images-to-ecr).
 
 Before upgrading a release installed from an earlier chart, follow
 [Upgrading SIE](../../README.md#upgrading-sie) in the module
